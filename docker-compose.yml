@@ -1,0 +1,19 @@
+services:
+  hub:
+    build:
+      context: .
+      dockerfile: hub/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./test/data:/mnt/couchdev
+      - ./test/fixtures/hub-config.json:/etc/couchdev/config.json:ro
+
+  webdev:
+    build:
+      context: .
+      dockerfile: mcp/webdev/Dockerfile
+    volumes:
+      - ./test/data:/mnt/couchdev
+    environment:
+      - DATA_ROOT=/mnt/couchdev

@@ -1,0 +1,5 @@
+{
+  "listen_addr": ":8080",
+  "token_hash": "59fc66b1c0d4e7e51c5368b20fa01679cadb0ae2f0a683993d4bed425a3c597a",
+  "db_path": "/mnt/couchdev/hub.db"
+}
