@@ -1,0 +1,66 @@
+package session_test
+
+import (
+	"database/sql"
+	"testing"
+
+	"github.com/pecodez/couchdev/internal/db"
+	"github.com/pecodez/couchdev/internal/project"
+	"github.com/pecodez/couchdev/internal/session"
+	"github.com/pecodez/couchdev/internal/tmux"
+)
+
+func openTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
+func TestGenesis_SessionDiesImmediately(t *testing.T) {
+	conn := openTestDB(t)
+	ps := project.NewStore(conn)
+	ss := session.NewStore(conn)
+	svc := session.NewService(ps, ss, tmux.NewMockDying())
+
+	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	_, err := svc.Genesis("proj", "s1", "")
+	if err == nil {
+		t.Fatal("expected error when spawned session exits immediately, got nil")
+	}
+
+	sessions, _ := ss.ListAll()
+	if len(sessions) != 0 {
+		t.Fatalf("expected 0 sessions in DB after failed spawn, got %d", len(sessions))
+	}
+}
+
+func TestGenesis_PersistsWhenSessionStaysAlive(t *testing.T) {
+	conn := openTestDB(t)
+	ps := project.NewStore(conn)
+	ss := session.NewStore(conn)
+	svc := session.NewService(ps, ss, tmux.NewMock())
+
+	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	got, err := svc.Genesis("proj", "s1", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.CanonicalName != "proj/s1" {
+		t.Errorf("canonical_name = %q, want proj/s1", got.CanonicalName)
+	}
+
+	sessions, _ := ss.ListAll()
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session in DB, got %d", len(sessions))
+	}
+}
