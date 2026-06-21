@@ -1,0 +1,38 @@
+package config
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+)
+
+type Config struct {
+	ListenAddr string `json:"listen_addr"`
+	TLSCert    string `json:"tls_cert"`
+	TLSKey     string `json:"tls_key"`
+	TokenHash  string `json:"token_hash"` // SHA-256 of bearer token, hex-encoded (64 chars)
+	DBPath     string `json:"db_path"`
+}
+
+func Load(path string) (*Config, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open config: %w", err)
+	}
+	defer f.Close()
+
+	var c Config
+	if err := json.NewDecoder(f).Decode(&c); err != nil {
+		return nil, fmt.Errorf("decode config: %w", err)
+	}
+	if c.TokenHash == "" {
+		return nil, fmt.Errorf("config: token_hash required")
+	}
+	if c.DBPath == "" {
+		return nil, fmt.Errorf("config: db_path required")
+	}
+	if c.ListenAddr == "" {
+		c.ListenAddr = ":8443"
+	}
+	return &c, nil
+}
