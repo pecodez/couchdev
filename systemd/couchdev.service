@@ -1,0 +1,19 @@
+[Unit]
+Description=CouchDev Session Launcher
+After=network.target
+
+[Service]
+Type=simple
+User=couchdev
+ExecStart=/usr/local/bin/couchdev serve --config /etc/couchdev/config.json
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/couchdev /home/couchdev
+
+[Install]
+WantedBy=multi-user.target
