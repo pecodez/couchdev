@@ -18,4 +18,6 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates tmux \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=go-build /couchdev /usr/local/bin/couchdev
-CMD ["couchdev", "serve", "--config", "/etc/couchdev/config.json"]
+COPY hub/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
