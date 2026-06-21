@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pecodez/couchdev/internal/project"
 	"github.com/pecodez/couchdev/internal/tmux"
@@ -38,6 +39,13 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 
 	if err := svc.tmux.NewSession(tmuxName, cwd, shellCmd); err != nil {
 		return nil, fmt.Errorf("spawn session: %w", err)
+	}
+
+	// tmux new-session -d always exits 0; give the process a moment to fail
+	// fast (e.g. claude not in PATH) before we commit the record.
+	time.Sleep(300 * time.Millisecond)
+	if !svc.tmux.HasSession(tmuxName) {
+		return nil, fmt.Errorf("session exited immediately after spawn — is claude installed and in PATH?")
 	}
 
 	sess, err := svc.sessions.Create(Session{
