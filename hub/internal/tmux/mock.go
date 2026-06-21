@@ -3,15 +3,24 @@ package tmux
 import "fmt"
 
 // Mock is an in-memory Client for testing.
-type Mock struct{ sessions map[string]bool }
+type Mock struct {
+	sessions   map[string]bool
+	dieOnSpawn bool
+}
 
 func NewMock() *Mock { return &Mock{sessions: make(map[string]bool)} }
+
+// NewMockDying returns a Mock where spawned sessions exit immediately,
+// simulating a command not found or instant crash.
+func NewMockDying() *Mock { return &Mock{sessions: make(map[string]bool), dieOnSpawn: true} }
 
 func (m *Mock) NewSession(name, cwd, shellCmd string) error {
 	if m.sessions[name] {
 		return fmt.Errorf("session %q already exists", name)
 	}
-	m.sessions[name] = true
+	if !m.dieOnSpawn {
+		m.sessions[name] = true
+	}
 	return nil
 }
 
