@@ -7,7 +7,10 @@ services:
       - "8080:8080"
     volumes:
       - ./test/data:/mnt/couchdev
-      - ./test/fixtures/hub-config.json:/etc/couchdev/config.json:ro
+    environment:
+      - TOKEN=couchdev-test-token
+      - LISTEN_ADDR=:8080
+      - DB_PATH=/mnt/couchdev/hub.db
 
   webdev:
     build:
