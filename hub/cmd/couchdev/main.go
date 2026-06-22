@@ -16,6 +16,7 @@ import (
 	"github.com/pecodez/couchdev/internal/auth"
 	"github.com/pecodez/couchdev/internal/config"
 	"github.com/pecodez/couchdev/internal/db"
+	"github.com/pecodez/couchdev/internal/git"
 	"github.com/pecodez/couchdev/internal/tmux"
 )
 
@@ -46,7 +47,7 @@ func main() {
 			}
 			defer conn.Close()
 
-			handler := api.New(tokenHash, conn, tmux.Exec{}, couchdev.WebFS)
+			handler := api.New(tokenHash, conn, tmux.Exec{}, couchdev.WebFS, cfg.ProjectsDir, git.Real{})
 			log.Info("starting", zap.String("addr", cfg.ListenAddr))
 			if cfg.TLSCert != "" && cfg.TLSKey != "" {
 				return http.ListenAndServeTLS(cfg.ListenAddr, cfg.TLSCert, cfg.TLSKey, handler)

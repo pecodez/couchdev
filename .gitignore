@@ -4,3 +4,5 @@ web/node_modules/
 test/data/*
 !test/data/.gitkeep
 test/node_modules/
+hub/web/storybook-static/
+hub/web/test-results/

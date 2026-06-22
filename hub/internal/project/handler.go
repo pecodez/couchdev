@@ -3,11 +3,24 @@ package project
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"github.com/pecodez/couchdev/internal/git"
 )
 
-type Handler struct{ store *Store }
+var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
-func NewHandler(store *Store) *Handler { return &Handler{store: store} }
+type Handler struct {
+	store       *Store
+	projectsDir string
+	git         git.Client
+}
+
+func NewHandler(store *Store, projectsDir string, g git.Client) *Handler {
+	return &Handler{store: store, projectsDir: projectsDir, git: g}
+}
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /projects", h.create)
@@ -20,10 +33,33 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if p.Name == "" || p.RepoPath == "" {
-		http.Error(w, "name and repo_path required", http.StatusBadRequest)
+	if !validName.MatchString(p.Name) {
+		http.Error(w, "name must start with a letter or number and contain only letters, numbers, - and _", http.StatusBadRequest)
 		return
 	}
+	p.RepoPath = filepath.Join(h.projectsDir, p.Name)
+
+	switch p.SourceType {
+	case "clone":
+		if p.RepoURL == "" {
+			http.Error(w, "repo_url required for clone", http.StatusBadRequest)
+			return
+		}
+		p.Registry = detectRegistry(p.RepoURL)
+		if err := h.git.Clone(p.RepoURL, p.RepoPath); err != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+	case "greenfield":
+		if err := h.git.Init(p.RepoPath); err != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+	default:
+		http.Error(w, "source_type must be 'clone' or 'greenfield'", http.StatusBadRequest)
+		return
+	}
+
 	created, err := h.store.Create(p)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -45,4 +81,15 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(projects)
+}
+
+func detectRegistry(url string) string {
+	switch {
+	case strings.Contains(url, "github.com"):
+		return "github"
+	case strings.Contains(url, "gitlab.com"):
+		return "gitlab"
+	default:
+		return "custom"
+	}
 }

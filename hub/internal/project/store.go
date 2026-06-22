@@ -14,8 +14,9 @@ func (s *Store) Create(p Project) (*Project, error) {
 		p.DefaultBranch = "main"
 	}
 	res, err := s.db.Exec(
-		`INSERT INTO projects (name, repo_path, default_branch, name_prefix) VALUES (?,?,?,?)`,
-		p.Name, p.RepoPath, p.DefaultBranch, p.NamePrefix,
+		`INSERT INTO projects (name, repo_path, default_branch, name_prefix, source_type, repo_url, registry)
+		 VALUES (?,?,?,?,?,?,?)`,
+		p.Name, p.RepoPath, p.DefaultBranch, p.NamePrefix, p.SourceType, p.RepoURL, p.Registry,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create project: %w", err)
@@ -27,7 +28,8 @@ func (s *Store) Create(p Project) (*Project, error) {
 
 func (s *Store) List() ([]Project, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, repo_path, default_branch, name_prefix FROM projects ORDER BY name`,
+		`SELECT id, name, repo_path, default_branch, name_prefix, source_type, repo_url, registry
+		 FROM projects ORDER BY name`,
 	)
 	if err != nil {
 		return nil, err
@@ -36,7 +38,7 @@ func (s *Store) List() ([]Project, error) {
 	var out []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.RepoPath, &p.DefaultBranch, &p.NamePrefix); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.RepoPath, &p.DefaultBranch, &p.NamePrefix, &p.SourceType, &p.RepoURL, &p.Registry); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -47,8 +49,9 @@ func (s *Store) List() ([]Project, error) {
 func (s *Store) GetByName(name string) (*Project, error) {
 	var p Project
 	err := s.db.QueryRow(
-		`SELECT id, name, repo_path, default_branch, name_prefix FROM projects WHERE name=?`, name,
-	).Scan(&p.ID, &p.Name, &p.RepoPath, &p.DefaultBranch, &p.NamePrefix)
+		`SELECT id, name, repo_path, default_branch, name_prefix, source_type, repo_url, registry
+		 FROM projects WHERE name=?`, name,
+	).Scan(&p.ID, &p.Name, &p.RepoPath, &p.DefaultBranch, &p.NamePrefix, &p.SourceType, &p.RepoURL, &p.Registry)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("project %q not found", name)
 	}

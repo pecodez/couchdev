@@ -6,4 +6,7 @@ type Project struct {
 	RepoPath      string `json:"repo_path"`
 	DefaultBranch string `json:"default_branch"`
 	NamePrefix    string `json:"name_prefix"`
+	SourceType    string `json:"source_type"`
+	RepoURL       string `json:"repo_url"`
+	Registry      string `json:"registry"`
 }

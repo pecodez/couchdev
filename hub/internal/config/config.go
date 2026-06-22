@@ -7,11 +7,12 @@ import (
 )
 
 type Config struct {
-	ListenAddr string `json:"listen_addr"`
-	TLSCert    string `json:"tls_cert"`
-	TLSKey     string `json:"tls_key"`
-	TokenHash  string `json:"token_hash"` // SHA-256 of bearer token, hex-encoded (64 chars)
-	DBPath     string `json:"db_path"`
+	ListenAddr  string `json:"listen_addr"`
+	TLSCert     string `json:"tls_cert"`
+	TLSKey      string `json:"tls_key"`
+	TokenHash   string `json:"token_hash"` // SHA-256 of bearer token, hex-encoded (64 chars)
+	DBPath      string `json:"db_path"`
+	ProjectsDir string `json:"projects_dir"`
 }
 
 func Load(path string) (*Config, error) {
@@ -33,6 +34,9 @@ func Load(path string) (*Config, error) {
 	}
 	if c.ListenAddr == "" {
 		c.ListenAddr = ":8443"
+	}
+	if c.ProjectsDir == "" {
+		c.ProjectsDir = "projects"
 	}
 	return &c, nil
 }

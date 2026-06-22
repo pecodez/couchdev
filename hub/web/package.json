@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "vrt": "playwright test",
+    "vrt:update": "playwright test --update-snapshots"
   },
   "keywords": [],
   "author": "",
@@ -17,7 +23,13 @@
     "vuetify": "^4.1.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
+    "@storybook/vue3-vite": "^10.4.6",
     "@vitejs/plugin-vue": "^6.0.7",
-    "vite": "^8.0.16"
+    "@vue/test-utils": "^2.4.11",
+    "jsdom": "^29.1.1",
+    "storybook": "^10.4.6",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9"
   }
 }

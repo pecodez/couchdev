@@ -27,7 +27,7 @@ export const api = {
   clearToken: () => localStorage.removeItem('couchdev_token'),
   verify: () => request('GET', '/projects').then(() => true).catch(() => false),
   listProjects: () => request('GET', '/projects'),
-  createProject: (name, repo_path) => request('POST', '/projects', { name, repo_path }),
+  createProject: (payload) => request('POST', '/projects', payload),
   listSessions: () => request('GET', '/sessions'),
   createSession: (project, session, cwd) =>
     request('POST', `/projects/${project}/sessions`, { session, cwd: cwd || undefined }),
