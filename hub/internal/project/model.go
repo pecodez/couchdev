@@ -9,4 +9,9 @@ type Project struct {
 	SourceType    string `json:"source_type"`
 	RepoURL       string `json:"repo_url"`
 	Registry      string `json:"registry"`
+	PlansPath     string `json:"plans_path,omitempty"`
+
+	// Computed at read time; not stored in DB.
+	SourceMissing bool   `json:"source_missing,omitempty"`
+	PlansDir      string `json:"plans_dir,omitempty"`
 }

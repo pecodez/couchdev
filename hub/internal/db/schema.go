@@ -30,4 +30,6 @@ var migrations = []string{
 	`ALTER TABLE projects ADD COLUMN source_type TEXT NOT NULL DEFAULT 'clone'`,
 	`ALTER TABLE projects ADD COLUMN repo_url    TEXT NOT NULL DEFAULT ''`,
 	`ALTER TABLE projects ADD COLUMN registry    TEXT NOT NULL DEFAULT ''`,
+	// v2: committable plans path (empty = hub default outside src/)
+	`ALTER TABLE projects ADD COLUMN plans_path TEXT NOT NULL DEFAULT ''`,
 }
