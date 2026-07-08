@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -17,6 +20,7 @@ import (
 	"github.com/pecodez/couchdev/internal/config"
 	"github.com/pecodez/couchdev/internal/db"
 	"github.com/pecodez/couchdev/internal/git"
+	"github.com/pecodez/couchdev/internal/project"
 	"github.com/pecodez/couchdev/internal/tmux"
 )
 
@@ -46,6 +50,8 @@ func main() {
 				return fmt.Errorf("open db: %w", err)
 			}
 			defer conn.Close()
+
+			runDiscovery(cfg.ProjectsDir, project.NewStore(conn), log)
 
 			handler := api.New(tokenHash, conn, tmux.Exec{}, couchdev.WebFS, cfg.ProjectsDir, git.Real{})
 			log.Info("starting", zap.String("addr", cfg.ListenAddr))
@@ -79,4 +85,64 @@ func main() {
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// runDiscovery scans projectsDir for flat git repos (not yet in src/ layout),
+// prompts for confirmation when running interactively, migrates the filesystem,
+// and registers any unregistered repos in the DB.
+func runDiscovery(projectsDir string, ps *project.Store, log *zap.Logger) {
+	flat, err := project.ScanFlat(projectsDir)
+	if err != nil {
+		log.Warn("discovery scan failed", zap.Error(err))
+		return
+	}
+	if len(flat) == 0 {
+		return
+	}
+
+	if !stdinIsTerminal() {
+		log.Warn("flat-layout repos found; start interactively to migrate",
+			zap.Int("count", len(flat)), zap.String("projects_dir", projectsDir))
+		return
+	}
+
+	fmt.Printf("\nFound %d repo(s) in %s without src/ layout:\n", len(flat), projectsDir)
+	for _, r := range flat {
+		fmt.Printf("  %s\n", r.Name)
+	}
+	fmt.Print("Move each into a src/ subdirectory? [y/N]: ")
+
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	if !strings.EqualFold(strings.TrimSpace(scanner.Text()), "y") {
+		log.Info("discovery migration skipped by user")
+		return
+	}
+
+	for _, r := range flat {
+		if err := project.MigrateFlat(projectsDir, r.Name); err != nil {
+			log.Error("migration failed", zap.String("name", r.Name), zap.Error(err))
+			continue
+		}
+		newPath := filepath.Join(projectsDir, r.Name, "src")
+		if existing, _ := ps.GetByName(r.Name); existing != nil {
+			if err := ps.UpdatePath(r.Name, newPath); err != nil {
+				log.Error("update path failed", zap.String("name", r.Name), zap.Error(err))
+			}
+		} else {
+			if _, err := ps.Create(project.Project{
+				Name:       r.Name,
+				RepoPath:   newPath,
+				SourceType: "existing",
+			}); err != nil {
+				log.Error("register failed", zap.String("name", r.Name), zap.Error(err))
+			}
+		}
+		log.Info("migrated repo", zap.String("name", r.Name), zap.String("src", newPath))
+	}
+}
+
+func stdinIsTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	return err == nil && (fi.Mode()&os.ModeCharDevice) != 0
 }

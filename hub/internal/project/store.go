@@ -14,9 +14,9 @@ func (s *Store) Create(p Project) (*Project, error) {
 		p.DefaultBranch = "main"
 	}
 	res, err := s.db.Exec(
-		`INSERT INTO projects (name, repo_path, default_branch, name_prefix, source_type, repo_url, registry)
-		 VALUES (?,?,?,?,?,?,?)`,
-		p.Name, p.RepoPath, p.DefaultBranch, p.NamePrefix, p.SourceType, p.RepoURL, p.Registry,
+		`INSERT INTO projects (name, repo_path, default_branch, name_prefix, source_type, repo_url, registry, plans_path)
+		 VALUES (?,?,?,?,?,?,?,?)`,
+		p.Name, p.RepoPath, p.DefaultBranch, p.NamePrefix, p.SourceType, p.RepoURL, p.Registry, p.PlansPath,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create project: %w", err)
@@ -28,7 +28,7 @@ func (s *Store) Create(p Project) (*Project, error) {
 
 func (s *Store) List() ([]Project, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, repo_path, default_branch, name_prefix, source_type, repo_url, registry
+		`SELECT id, name, repo_path, default_branch, name_prefix, source_type, repo_url, registry, plans_path
 		 FROM projects ORDER BY name`,
 	)
 	if err != nil {
@@ -38,7 +38,7 @@ func (s *Store) List() ([]Project, error) {
 	var out []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.RepoPath, &p.DefaultBranch, &p.NamePrefix, &p.SourceType, &p.RepoURL, &p.Registry); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.RepoPath, &p.DefaultBranch, &p.NamePrefix, &p.SourceType, &p.RepoURL, &p.Registry, &p.PlansPath); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -49,11 +49,28 @@ func (s *Store) List() ([]Project, error) {
 func (s *Store) GetByName(name string) (*Project, error) {
 	var p Project
 	err := s.db.QueryRow(
-		`SELECT id, name, repo_path, default_branch, name_prefix, source_type, repo_url, registry
+		`SELECT id, name, repo_path, default_branch, name_prefix, source_type, repo_url, registry, plans_path
 		 FROM projects WHERE name=?`, name,
-	).Scan(&p.ID, &p.Name, &p.RepoPath, &p.DefaultBranch, &p.NamePrefix, &p.SourceType, &p.RepoURL, &p.Registry)
+	).Scan(&p.ID, &p.Name, &p.RepoPath, &p.DefaultBranch, &p.NamePrefix, &p.SourceType, &p.RepoURL, &p.Registry, &p.PlansPath)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("project %q not found", name)
 	}
 	return &p, err
+}
+
+func (s *Store) Delete(name string) error {
+	res, err := s.db.Exec(`DELETE FROM projects WHERE name = ?`, name)
+	if err != nil {
+		return fmt.Errorf("delete project: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("project %q not found", name)
+	}
+	return nil
+}
+
+func (s *Store) UpdatePath(name, newRepoPath string) error {
+	_, err := s.db.Exec(`UPDATE projects SET repo_path = ? WHERE name = ?`, newRepoPath, name)
+	return err
 }
