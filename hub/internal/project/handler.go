@@ -39,7 +39,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name must start with a letter or number and contain only letters, numbers, - and _", http.StatusBadRequest)
 		return
 	}
-	p.RepoPath = filepath.Join(h.projectsDir, p.Name, "src")
+	p.RepoPath = filepath.Join(h.projectsDir, p.Name, "source")
 
 	switch p.SourceType {
 	case "clone":
@@ -118,8 +118,8 @@ func (h *Handler) enrich(p *Project) {
 }
 
 // plansDir returns the effective plans directory for p.
-// When PlansPath is empty the hub owns plans outside src/;
-// when set the path is relative to src/ enabling SCM commits.
+// When PlansPath is empty the hub owns plans outside source/;
+// when set the path is relative to source/ enabling SCM commits.
 func (h *Handler) plansDir(p *Project) string {
 	if p.PlansPath == "" {
 		return filepath.Join(h.projectsDir, p.Name, "plans")
