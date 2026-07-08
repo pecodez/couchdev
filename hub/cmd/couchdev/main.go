@@ -24,6 +24,8 @@ import (
 	"github.com/pecodez/couchdev/internal/tmux"
 )
 
+var version = "dev"
+
 func main() {
 	root := &cobra.Command{Use: "couchdev", Short: "Claude Code RC session launcher"}
 
@@ -79,8 +81,14 @@ func main() {
 			return nil
 		},
 	}
+	versionCmd := &cobra.Command{
+		Use:   "version",
+		Short: "Print version",
+		Run:   func(cmd *cobra.Command, args []string) { fmt.Println(version) },
+	}
+
 	tokenCmd.AddCommand(tokenGenCmd)
-	root.AddCommand(serveCmd, tokenCmd)
+	root.AddCommand(serveCmd, tokenCmd, versionCmd)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
