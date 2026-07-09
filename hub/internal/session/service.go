@@ -37,6 +37,14 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 	tmuxName := tmux.SessionName(projectName, sessionName)
 	shellCmd := fmt.Sprintf(`claude --rc "%s"`, canonical)
 
+	// Kill any orphaned tmux session with this name before spawning.  This
+	// happens when a previous Genesis attempt created the tmux session but
+	// failed (or the DB was reset) before the record was committed, leaving
+	// a session that would otherwise block a retry with "already exists".
+	if svc.tmux.HasSession(tmuxName) {
+		_ = svc.tmux.KillSession(tmuxName)
+	}
+
 	if err := svc.tmux.NewSession(tmuxName, cwd, shellCmd); err != nil {
 		return nil, fmt.Errorf("spawn session: %w", err)
 	}
