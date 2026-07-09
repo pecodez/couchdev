@@ -144,15 +144,18 @@ echo "Symlinked        → $LINK_DIR/couchdev"
 # ── starter config ────────────────────────────────────────────────────────────
 
 CONFIG_FILE="$ETC_DIR/config.json"
+GENERATED_TOKEN=""
 if [[ -f "$CONFIG_FILE" ]] && [[ "$FORCE" == false ]]; then
   echo "Config exists at $CONFIG_FILE (use --force to overwrite)"
 else
+  GENERATED_TOKEN=$(openssl rand -hex 32)
+  TOKEN_HASH=$(printf '%s' "$GENERATED_TOKEN" | sha256sum | cut -d' ' -f1)
   cat > "$CONFIG_FILE" <<EOF
 {
   "listen_addr": ":8443",
   "db_path": "${DATA_DIR}/couchdev.db",
   "projects_dir": "${DATA_DIR}/projects",
-  "token_hash": "REPLACE_WITH_SHA256_OF_YOUR_TOKEN"
+  "token_hash": "${TOKEN_HASH}"
 }
 EOF
   echo "Wrote config     → $CONFIG_FILE"
@@ -226,34 +229,37 @@ cat <<EOF
 ══════════════════════════════════════════
  Couchdev installed → ${PREFIX}
 ══════════════════════════════════════════
+EOF
 
-Next steps:
+if [[ -n "$GENERATED_TOKEN" ]]; then
+  cat <<EOF
 
-1. Generate a token and its SHA-256 hash:
+Bearer token (configure this in your client):
 
-   TOKEN=\$(openssl rand -hex 32)
-   echo "Token:     \$TOKEN"
-   echo "Hash:      \$(echo -n "\$TOKEN" | sha256sum | cut -d' ' -f1)"
-
-2. Set token_hash in ${CONFIG_FILE}
+   ${GENERATED_TOKEN}
 
 EOF
+fi
 
 if [[ "$MODE" == "system" ]]; then
   cat <<EOF
-3. Create the service user and set ownership:
+Next steps:
+
+1. Create the service user and set ownership:
 
    useradd -r -s /usr/sbin/nologin -d ${DATA_DIR} couchdev
    chown -R couchdev:couchdev ${PREFIX}
 
-4. Enable and start:
+2. Enable and start:
 
    systemctl enable --now couchdev
 
 EOF
 else
   cat <<EOF
-3. Enable and start:
+Next steps:
+
+1. Enable and start:
 
    systemctl --user enable --now couchdev
 
