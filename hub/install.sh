@@ -67,6 +67,29 @@ case "$(uname -m)" in
   *) echo "error: unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
+# ── dependency checks ─────────────────────────────────────────────────────────
+
+DEPS_OK=true
+
+if ! command -v tmux &>/dev/null; then
+  echo "error: tmux is not installed — sessions cannot be created without it" >&2
+  echo "       Install with: apt install tmux  (or brew install tmux)" >&2
+  DEPS_OK=false
+fi
+
+if ! command -v claude &>/dev/null; then
+  echo "warning: claude CLI not found in PATH — sessions will fail until it is installed" >&2
+  echo "         See https://claude.ai/code to install Claude Code" >&2
+fi
+
+if ! command -v openssl &>/dev/null && ! command -v sha256sum &>/dev/null; then
+  echo "warning: neither openssl nor sha256sum found — you will need one to generate a token hash" >&2
+fi
+
+if [[ "$DEPS_OK" == false ]]; then
+  exit 1
+fi
+
 # ── acquire binary ────────────────────────────────────────────────────────────
 
 TMP_BIN="$(mktemp)"
