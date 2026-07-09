@@ -6,6 +6,7 @@ REPO="pecodez/couchdev"
 VERSION="latest"
 LOCAL_BIN=""
 FORCE=false
+FORCE_CLAUDE_MD=false
 EXPLICIT_PREFIX=""
 
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
@@ -25,6 +26,7 @@ Options:
   --version=TAG         GitHub release tag to download (default: latest)
   --local-bin=PATH      Skip download; install this pre-built binary instead
   --force               Overwrite existing config
+  --force-claude-md     Overwrite existing projects CLAUDE.md (e.g. on upgrade)
   -h, --help            Show this help
 EOF
 }
@@ -40,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --local-bin=*)   LOCAL_BIN="${1#*=}" ;;
     --local-bin)     LOCAL_BIN="$2"; shift ;;
     --force)         FORCE=true ;;
+    --force-claude-md) FORCE_CLAUDE_MD=true ;;
     -h|--help)       usage; exit 0 ;;
     *) echo "Unknown flag: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -106,6 +109,22 @@ fi
 # ── directory layout ──────────────────────────────────────────────────────────
 
 mkdir -p "$BIN_DIR" "$ETC_DIR" "$DATA_DIR/projects"
+
+# ── hub CLAUDE.md ─────────────────────────────────────────────────────────────
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HUB_CLAUDE_SRC="$SCRIPT_DIR/claude/hub-claude.md"
+PROJECTS_DIR="${DATA_DIR}/projects"
+PROJECTS_CLAUDE="$PROJECTS_DIR/CLAUDE.md"
+
+if [[ -f "$HUB_CLAUDE_SRC" ]]; then
+  if [[ ! -f "$PROJECTS_CLAUDE" ]] || [[ "$FORCE_CLAUDE_MD" == true ]]; then
+    cp "$HUB_CLAUDE_SRC" "$PROJECTS_CLAUDE"
+    echo "Installed CLAUDE.md → $PROJECTS_CLAUDE"
+  else
+    echo "Skipping CLAUDE.md  (already exists; use --force-claude-md to overwrite)"
+  fi
+fi
 
 # ── install binary ────────────────────────────────────────────────────────────
 
