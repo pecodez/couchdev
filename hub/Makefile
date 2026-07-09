@@ -1,3 +1,5 @@
+export PATH := $(PATH):/usr/local/go/bin
+
 .PHONY: build build-go build-web build-release install release-patch release-minor release-major clean
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
