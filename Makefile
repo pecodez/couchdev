@@ -1,4 +1,4 @@
-export PATH := $(PATH):/home/phil/go-sdk/go/bin
+export PATH := $(PATH):/usr/local/go/bin
 
 HUB     := hub
 WEB     := hub/web
