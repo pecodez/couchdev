@@ -234,7 +234,7 @@ EOF
 if [[ -n "$GENERATED_TOKEN" ]]; then
   cat <<EOF
 
-Bearer token (copy this now — it will not be shown again):
+Bearer token (configure this in your client):
 
    ${GENERATED_TOKEN}
 
