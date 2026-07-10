@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# couchdev must run as the same user as claude and tmux — system-wide installs
+# under a separate service account cannot access the user's Claude credentials
+# or tmux sessions.  User-mode only.
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  echo "error: do not run install.sh as root — couchdev must run as your own user" >&2
+  echo "       Re-run without sudo." >&2
+  exit 1
+fi
+
 REPO="pecodez/couchdev"
 
 VERSION="latest"
@@ -9,20 +18,12 @@ FORCE=false
 FORCE_CLAUDE_MD=false
 EXPLICIT_PREFIX=""
 
-if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-  MODE="system"
-else
-  MODE="user"
-fi
-
 usage() {
   cat <<EOF
 Usage: install.sh [OPTIONS]
 
 Options:
-  --system              Install system-wide under /opt/couchdev (default when run as root)
-  --user                Install for current user under \$HOME/.local/couchdev
-  --prefix=PATH         Override install prefix
+  --prefix=PATH         Override install prefix (default: \$HOME/.local/couchdev)
   --version=TAG         GitHub release tag to download (default: latest)
   --local-bin=PATH      Skip download; install this pre-built binary instead
   --force               Overwrite existing config
@@ -33,8 +34,6 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --system)        MODE="system" ;;
-    --user)          MODE="user" ;;
     --prefix=*)      EXPLICIT_PREFIX="${1#*=}" ;;
     --prefix)        EXPLICIT_PREFIX="$2"; shift ;;
     --version=*)     VERSION="${1#*=}" ;;
@@ -49,17 +48,11 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ -n "$EXPLICIT_PREFIX" ]]; then
-  PREFIX="$EXPLICIT_PREFIX"
-elif [[ "$MODE" == "system" ]]; then
-  PREFIX="/opt/couchdev"
-else
-  PREFIX="${HOME}/.local/couchdev"
-fi
-
+PREFIX="${EXPLICIT_PREFIX:-${HOME}/.local/couchdev}"
 BIN_DIR="$PREFIX/bin"
 ETC_DIR="$PREFIX/etc"
 DATA_DIR="$PREFIX/data"
+PROJECTS_DIR="$DATA_DIR/projects"
 
 case "$(uname -m)" in
   x86_64)  ARCH="amd64" ;;
@@ -82,8 +75,8 @@ if ! command -v claude &>/dev/null; then
   echo "         See https://claude.ai/code to install Claude Code" >&2
 fi
 
-if ! command -v openssl &>/dev/null && ! command -v sha256sum &>/dev/null; then
-  echo "warning: neither openssl nor sha256sum found — you will need one to generate a token hash" >&2
+if ! command -v python3 &>/dev/null; then
+  echo "warning: python3 not found — Claude workspace trust registration will be skipped" >&2
 fi
 
 if [[ "$DEPS_OK" == false ]]; then
@@ -131,13 +124,12 @@ fi
 
 # ── directory layout ──────────────────────────────────────────────────────────
 
-mkdir -p "$BIN_DIR" "$ETC_DIR" "$DATA_DIR/projects"
+mkdir -p "$BIN_DIR" "$ETC_DIR" "$PROJECTS_DIR"
 
 # ── hub CLAUDE.md ─────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HUB_CLAUDE_SRC="$SCRIPT_DIR/claude/hub-claude.md"
-PROJECTS_DIR="${DATA_DIR}/projects"
 PROJECTS_CLAUDE="$PROJECTS_DIR/CLAUDE.md"
 
 if [[ -f "$HUB_CLAUDE_SRC" ]]; then
@@ -155,12 +147,8 @@ cp "$TMP_BIN" "$BIN_DIR/couchdev"
 chmod +x "$BIN_DIR/couchdev"
 echo "Installed binary → $BIN_DIR/couchdev"
 
-if [[ "$MODE" == "system" ]]; then
-  LINK_DIR="/usr/local/bin"
-else
-  LINK_DIR="${HOME}/.local/bin"
-  mkdir -p "$LINK_DIR"
-fi
+LINK_DIR="${HOME}/.local/bin"
+mkdir -p "$LINK_DIR"
 ln -sf "$BIN_DIR/couchdev" "$LINK_DIR/couchdev"
 echo "Symlinked        → $LINK_DIR/couchdev"
 
@@ -171,53 +159,55 @@ GENERATED_TOKEN=""
 if [[ -f "$CONFIG_FILE" ]] && [[ "$FORCE" == false ]]; then
   echo "Config exists at $CONFIG_FILE (use --force to overwrite)"
 else
-  GENERATED_TOKEN=$(openssl rand -hex 32)
-  TOKEN_HASH=$(printf '%s' "$GENERATED_TOKEN" | sha256sum | cut -d' ' -f1)
+  TOKEN_OUTPUT=$("$BIN_DIR/couchdev" token generate)
+  GENERATED_TOKEN=$(echo "$TOKEN_OUTPUT" | awk 'NR==2{print $1}')
+  TOKEN_HASH=$(echo "$TOKEN_OUTPUT" | awk 'NR==5{print $1}')
   cat > "$CONFIG_FILE" <<EOF
 {
   "listen_addr": ":8443",
   "db_path": "${DATA_DIR}/couchdev.db",
-  "projects_dir": "${DATA_DIR}/projects",
+  "projects_dir": "${PROJECTS_DIR}",
   "token_hash": "${TOKEN_HASH}"
 }
 EOF
   echo "Wrote config     → $CONFIG_FILE"
 fi
 
-# ── systemd unit ──────────────────────────────────────────────────────────────
+# ── register projects dir as trusted in Claude settings ───────────────────────
+# Claude shows a workspace trust dialog for directories it hasn't seen before.
+# Adding the projects dir to additionalDirectories means all project worktrees
+# (children of this path) are trusted from the first session — no dialog needed.
 
-install_system_unit() {
-  local dest="/etc/systemd/system/couchdev.service"
-  sed "s|@PREFIX@|${PREFIX}|g" > "$dest" <<'UNIT'
-[Unit]
-Description=Couchdev hub
-After=network.target
+if command -v python3 &>/dev/null; then
+  CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+  python3 - "$PROJECTS_DIR" "$CLAUDE_SETTINGS" <<'PYEOF'
+import sys, json, os
+projects_dir, settings_path = sys.argv[1], sys.argv[2]
+settings = {}
+if os.path.exists(settings_path):
+    try:
+        with open(settings_path) as f:
+            settings = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        pass
+dirs = settings.setdefault("permissions", {}).setdefault("additionalDirectories", [])
+if projects_dir not in dirs:
+    dirs.append(projects_dir)
+    with open(settings_path, "w") as f:
+        json.dump(settings, f, indent=4)
+    print(f"Trusted projects → {projects_dir}")
+else:
+    print(f"Already trusted  → {projects_dir}")
+PYEOF
+fi
 
-[Service]
-Type=simple
-User=couchdev
-Group=couchdev
-ExecStart=@PREFIX@/bin/couchdev serve --config @PREFIX@/etc/config.json
-Restart=on-failure
-RestartSec=5
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-ReadWritePaths=@PREFIX@/data
+# ── systemd user unit ─────────────────────────────────────────────────────────
 
-[Install]
-WantedBy=multi-user.target
-UNIT
-  echo "Installed unit   → $dest"
-  systemctl daemon-reload
-}
-
-install_user_unit() {
-  local dir="${HOME}/.config/systemd/user"
-  local dest="$dir/couchdev.service"
-  mkdir -p "$dir"
-  sed "s|@PREFIX@|${PREFIX}|g" > "$dest" <<'UNIT'
+if command -v systemctl &>/dev/null; then
+  UNIT_DIR="${HOME}/.config/systemd/user"
+  UNIT_FILE="$UNIT_DIR/couchdev.service"
+  mkdir -p "$UNIT_DIR"
+  sed "s|@PREFIX@|${PREFIX}|g" > "$UNIT_FILE" <<'UNIT'
 [Unit]
 Description=Couchdev hub
 After=network.target
@@ -231,16 +221,8 @@ RestartSec=5
 [Install]
 WantedBy=default.target
 UNIT
-  echo "Installed unit   → $dest"
+  echo "Installed unit   → $UNIT_FILE"
   systemctl --user daemon-reload 2>/dev/null || true
-}
-
-if command -v systemctl &>/dev/null; then
-  if [[ "$MODE" == "system" ]]; then
-    install_system_unit
-  else
-    install_user_unit
-  fi
 else
   echo "systemctl not found — skipping service install"
 fi
@@ -257,37 +239,20 @@ EOF
 if [[ -n "$GENERATED_TOKEN" ]]; then
   cat <<EOF
 
-Bearer token (configure this in your client):
+Bearer token (add this in the Claude android app):
 
    ${GENERATED_TOKEN}
 
 EOF
 fi
 
-if [[ "$MODE" == "system" ]]; then
-  cat <<EOF
-Next steps:
-
-1. Create the service user and set ownership:
-
-   useradd -r -s /usr/sbin/nologin -d ${DATA_DIR} couchdev
-   chown -R couchdev:couchdev ${PREFIX}
-
-2. Enable and start:
-
-   systemctl enable --now couchdev
-
-EOF
-else
-  cat <<EOF
+cat <<EOF
 Next steps:
 
 1. Enable and start:
 
    systemctl --user enable --now couchdev
 
-EOF
-fi
+   Or run directly:  couchdev serve --config ${CONFIG_FILE}
 
-echo "   Or run directly:  couchdev serve --config ${CONFIG_FILE}"
-echo ""
+EOF
