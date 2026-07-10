@@ -4,8 +4,9 @@ import "fmt"
 
 // Mock is an in-memory Client for testing.
 type Mock struct {
-	sessions   map[string]bool
-	dieOnSpawn bool
+	sessions    map[string]bool
+	dieOnSpawn  bool
+	LastCmd     string // shell command passed to the most recent NewSession call
 }
 
 func NewMock() *Mock { return &Mock{sessions: make(map[string]bool)} }
@@ -15,6 +16,7 @@ func NewMock() *Mock { return &Mock{sessions: make(map[string]bool)} }
 func NewMockDying() *Mock { return &Mock{sessions: make(map[string]bool), dieOnSpawn: true} }
 
 func (m *Mock) NewSession(name, cwd, shellCmd string) error {
+	m.LastCmd = shellCmd
 	if m.sessions[name] {
 		return fmt.Errorf("session %q already exists", name)
 	}
