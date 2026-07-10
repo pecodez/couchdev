@@ -10,6 +10,8 @@ require (
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/go-enry/go-enry/v2 v2.9.6 // indirect
+	github.com/go-enry/go-oniguruma v1.2.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
