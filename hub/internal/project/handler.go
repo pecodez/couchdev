@@ -16,6 +16,16 @@ import (
 )
 
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+var mdBlockquote = regexp.MustCompile(`^\s*>\s*`)
+var mdLink = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
+var mdEmphasis = regexp.MustCompile(`\*\*|__|\*|_|` + "`")
+
+func stripMarkdown(s string) string {
+	s = mdBlockquote.ReplaceAllString(s, "")
+	s = mdLink.ReplaceAllString(s, "$1")
+	s = mdEmphasis.ReplaceAllString(s, "")
+	return strings.TrimSpace(s)
+}
 
 type Handler struct {
 	store       *Store
@@ -147,7 +157,7 @@ func readmeDescription(repoPath string) string {
 			if strings.HasPrefix(line, "![") || strings.HasPrefix(line, "[![") {
 				continue
 			}
-			return line
+			return stripMarkdown(line)
 		}
 	}
 	return ""
