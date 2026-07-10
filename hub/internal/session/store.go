@@ -12,10 +12,10 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 
 func (s *Store) Create(sess Session) (*Session, error) {
 	res, err := s.db.Exec(`
-		INSERT INTO sessions (project_id, session, canonical_name, passed_name, cwd, tmux_name, pid)
-		VALUES (?,?,?,?,?,?,?)`,
+		INSERT INTO sessions (project_id, session, canonical_name, passed_name, cwd, branch, worktree_path, tmux_name, pid)
+		VALUES (?,?,?,?,?,?,?,?,?)`,
 		sess.ProjectID, sess.Session, sess.CanonicalName, sess.PassedName,
-		sess.CWD, sess.TmuxName, sess.PID,
+		sess.CWD, sess.Branch, sess.WorktreePath, sess.TmuxName, sess.PID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
@@ -30,10 +30,11 @@ func (s *Store) GetByCanonical(canonical string) (*Session, error) {
 	var started string
 	var pid sql.NullInt64
 	err := s.db.QueryRow(`
-		SELECT id, project_id, session, canonical_name, passed_name, cwd, tmux_name, pid, killed, started_at
+		SELECT id, project_id, session, canonical_name, passed_name, cwd, branch, worktree_path, tmux_name, pid, killed, started_at
 		FROM sessions WHERE canonical_name=?`, canonical,
 	).Scan(&sess.ID, &sess.ProjectID, &sess.Session, &sess.CanonicalName,
-		&sess.PassedName, &sess.CWD, &sess.TmuxName, &pid, &sess.Killed, &started)
+		&sess.PassedName, &sess.CWD, &sess.Branch, &sess.WorktreePath,
+		&sess.TmuxName, &pid, &sess.Killed, &started)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("session %q not found", canonical)
 	}
@@ -50,7 +51,7 @@ func (s *Store) GetByCanonical(canonical string) (*Session, error) {
 
 func (s *Store) ListAll() ([]Session, error) {
 	rows, err := s.db.Query(`
-		SELECT id, project_id, session, canonical_name, passed_name, cwd, tmux_name, pid, killed, started_at
+		SELECT id, project_id, session, canonical_name, passed_name, cwd, branch, worktree_path, tmux_name, pid, killed, started_at
 		FROM sessions ORDER BY started_at DESC`)
 	if err != nil {
 		return nil, err
@@ -62,7 +63,8 @@ func (s *Store) ListAll() ([]Session, error) {
 		var started string
 		var pid sql.NullInt64
 		if err := rows.Scan(&sess.ID, &sess.ProjectID, &sess.Session, &sess.CanonicalName,
-			&sess.PassedName, &sess.CWD, &sess.TmuxName, &pid, &sess.Killed, &started); err != nil {
+			&sess.PassedName, &sess.CWD, &sess.Branch, &sess.WorktreePath,
+			&sess.TmuxName, &pid, &sess.Killed, &started); err != nil {
 			return nil, err
 		}
 		if pid.Valid {

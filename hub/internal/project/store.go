@@ -46,6 +46,18 @@ func (s *Store) List() ([]Project, error) {
 	return out, rows.Err()
 }
 
+func (s *Store) GetByID(id int64) (*Project, error) {
+	var p Project
+	err := s.db.QueryRow(
+		`SELECT id, name, repo_path, default_branch, name_prefix, source_type, repo_url, registry, plans_path
+		 FROM projects WHERE id=?`, id,
+	).Scan(&p.ID, &p.Name, &p.RepoPath, &p.DefaultBranch, &p.NamePrefix, &p.SourceType, &p.RepoURL, &p.Registry, &p.PlansPath)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("project id %d not found", id)
+	}
+	return &p, err
+}
+
 func (s *Store) GetByName(name string) (*Project, error) {
 	var p Project
 	err := s.db.QueryRow(

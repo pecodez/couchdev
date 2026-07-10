@@ -2,8 +2,10 @@ package session
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
+	"github.com/pecodez/couchdev/internal/git"
 	"github.com/pecodez/couchdev/internal/project"
 	"github.com/pecodez/couchdev/internal/tmux"
 )
@@ -12,10 +14,11 @@ type Service struct {
 	projects *project.Store
 	sessions *Store
 	tmux     tmux.Client
+	git      git.Client
 }
 
-func NewService(projects *project.Store, sessions *Store, t tmux.Client) *Service {
-	return &Service{projects: projects, sessions: sessions, tmux: t}
+func NewService(projects *project.Store, sessions *Store, t tmux.Client, g git.Client) *Service {
+	return &Service{projects: projects, sessions: sessions, tmux: t, git: g}
 }
 
 func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, error) {
@@ -31,8 +34,14 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 		}
 	}
 
+	branch := sessionName
+	worktreePath := filepath.Join(filepath.Dir(proj.RepoPath), "worktrees", sessionName)
+	if err := svc.git.WorktreeAdd(proj.RepoPath, worktreePath, branch); err != nil {
+		return nil, fmt.Errorf("create worktree: %w", err)
+	}
+
 	if cwd == "" {
-		cwd = proj.RepoPath
+		cwd = worktreePath
 	}
 	tmuxName := tmux.SessionName(projectName, sessionName)
 	// --dangerously-skip-permissions bypasses claude's per-directory trust prompt,
@@ -66,10 +75,13 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 		CanonicalName: canonical,
 		PassedName:    canonical,
 		CWD:           cwd,
+		Branch:        branch,
+		WorktreePath:  worktreePath,
 		TmuxName:      tmuxName,
 	})
 	if err != nil {
-		svc.tmux.KillSession(tmuxName) // best-effort rollback
+		svc.tmux.KillSession(tmuxName)                       // best-effort rollback
+		svc.git.WorktreeRemove(proj.RepoPath, worktreePath)  // best-effort rollback
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	sess.State = StateStarting
@@ -108,7 +120,37 @@ func (svc *Service) Teardown(projectName, sessionName string) error {
 			return fmt.Errorf("kill tmux: %w", err)
 		}
 	}
+	if sess.WorktreePath != "" {
+		proj, err := svc.projects.GetByID(sess.ProjectID)
+		if err == nil {
+			_ = svc.git.WorktreeRemove(proj.RepoPath, sess.WorktreePath) // best-effort
+		}
+	}
 	return svc.sessions.MarkKilled(canonical)
+}
+
+func (svc *Service) Changes(projectName, sessionName string) (int, []string, error) {
+	canonical := projectName + "/" + sessionName
+	sess, err := svc.sessions.GetByCanonical(canonical)
+	if err != nil {
+		return 0, nil, err
+	}
+	if sess.WorktreePath == "" {
+		return 0, nil, nil
+	}
+	proj, err := svc.projects.GetByID(sess.ProjectID)
+	if err != nil {
+		return 0, nil, err
+	}
+	ahead, err := svc.git.CommitsAhead(sess.WorktreePath, proj.DefaultBranch)
+	if err != nil {
+		return 0, nil, fmt.Errorf("commits ahead: %w", err)
+	}
+	files, err := svc.git.ChangedFiles(sess.WorktreePath)
+	if err != nil {
+		return 0, nil, fmt.Errorf("changed files: %w", err)
+	}
+	return ahead, files, nil
 }
 
 func (svc *Service) deriveState(sess *Session) State {

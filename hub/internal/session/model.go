@@ -18,6 +18,8 @@ type Session struct {
 	CanonicalName string    `json:"canonical_name"`
 	PassedName    string    `json:"passed_name"`
 	CWD           string    `json:"cwd"`
+	Branch        string    `json:"branch"`
+	WorktreePath  string    `json:"worktree_path"`
 	TmuxName      string    `json:"tmux_name"`
 	PID           *int      `json:"pid,omitempty"`
 	Killed        bool      `json:"-"`
