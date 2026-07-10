@@ -16,6 +16,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /sessions/{project}/{session}", h.status)
 	mux.HandleFunc("GET /sessions/{project}/{session}/changes", h.changes)
 	mux.HandleFunc("DELETE /sessions/{project}/{session}", h.teardown)
+	mux.HandleFunc("POST /sessions/{project}/{session}/resume", h.resume)
 }
 
 func (h *Handler) genesis(w http.ResponseWriter, r *http.Request) {
@@ -114,4 +115,22 @@ func (h *Handler) teardown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) resume(w http.ResponseWriter, r *http.Request) {
+	sess, err := h.svc.Resume(r.PathValue("project"), r.PathValue("session"))
+	if err != nil {
+		code := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			code = http.StatusNotFound
+		} else if strings.Contains(err.Error(), "already live") {
+			code = http.StatusConflict
+		} else if strings.Contains(err.Error(), "is dead") {
+			code = http.StatusUnprocessableEntity
+		}
+		http.Error(w, err.Error(), code)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(sess)
 }

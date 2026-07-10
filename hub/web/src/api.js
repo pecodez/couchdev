@@ -34,4 +34,5 @@ export const api = {
   getSession: (project, session) => request('GET', `/sessions/${project}/${session}`),
   deleteSession: (project, session) => request('DELETE', `/sessions/${project}/${session}`),
   getChanges: (project, session) => request('GET', `/sessions/${project}/${session}/changes`),
+  resumeSession: (project, session) => request('POST', `/sessions/${project}/${session}/resume`, {}),
 }

@@ -18,8 +18,14 @@
                     prepend-icon="mdi-source-branch">{{ s.branch }}</v-chip>
           </div>
           <template #actions>
-            <v-btn icon="mdi-stop-circle-outline" size="x-small" variant="text"
-                   :disabled="s.state === 'dead'" @click.stop="teardown(s)" />
+            <template v-if="s.state === 'resumable'">
+              <v-btn icon="mdi-play-circle-outline" size="x-small" variant="text"
+                     title="Resume" @click.stop="resume(s)" />
+              <v-btn icon="mdi-delete-outline" size="x-small" variant="text"
+                     title="Delete" @click.stop="teardown(s)" />
+            </template>
+            <v-btn v-else icon="mdi-stop-circle-outline" size="x-small" variant="text"
+                   :disabled="s.state === 'starting'" @click.stop="teardown(s)" />
           </template>
         </v-expansion-panel-title>
         <v-expansion-panel-text>
@@ -65,11 +71,18 @@ const stateColor = s => ({ live: 'success', starting: 'warning', resumable: 'inf
 
 async function load() {
   const all = await api.listSessions()
-  sessions.value = all.filter(s => s.canonical_name.startsWith(props.project + '/'))
+  sessions.value = all.filter(s =>
+    s.canonical_name.startsWith(props.project + '/') && s.state !== 'dead'
+  )
 }
 
 async function teardown(s) {
   await api.deleteSession(props.project, s.session)
+  await load()
+}
+
+async function resume(s) {
+  await api.resumeSession(props.project, s.session)
   await load()
 }
 

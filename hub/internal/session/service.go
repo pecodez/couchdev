@@ -189,6 +189,30 @@ func (svc *Service) Changes(projectName, sessionName string) (int, []string, err
 	return ahead, files, nil
 }
 
+func (svc *Service) Resume(projectName, sessionName string) (*Session, error) {
+	canonical := projectName + "/" + sessionName
+	sess, err := svc.sessions.GetByCanonical(canonical)
+	if err != nil {
+		return nil, err
+	}
+	if sess.Killed {
+		return nil, fmt.Errorf("session %q is dead", canonical)
+	}
+	if svc.tmux.HasSession(sess.TmuxName) {
+		return nil, fmt.Errorf("session %q is already live", canonical)
+	}
+	shellCmd := fmt.Sprintf(`claude --rc "%s" --dangerously-skip-permissions`, canonical)
+	if err := svc.tmux.NewSession(sess.TmuxName, sess.CWD, shellCmd); err != nil {
+		return nil, fmt.Errorf("spawn session: %w", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if !svc.tmux.HasSession(sess.TmuxName) {
+		return nil, fmt.Errorf("session exited immediately after spawn — is claude installed and in PATH?")
+	}
+	sess.State = StateStarting
+	return sess, nil
+}
+
 func (svc *Service) deriveState(sess *Session) State {
 	if sess.Killed {
 		return StateDead
