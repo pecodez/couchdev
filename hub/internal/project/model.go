@@ -12,6 +12,8 @@ type Project struct {
 	PlansPath     string `json:"plans_path,omitempty"`
 
 	// Computed at read time; not stored in DB.
-	SourceMissing bool   `json:"source_missing,omitempty"`
-	PlansDir      string `json:"plans_dir,omitempty"`
+	SourceMissing bool     `json:"source_missing,omitempty"`
+	PlansDir      string   `json:"plans_dir,omitempty"`
+	Description   string   `json:"description,omitempty"`
+	Languages     []string `json:"languages,omitempty"`
 }

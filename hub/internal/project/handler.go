@@ -1,13 +1,17 @@
 package project
 
 import (
+	"bufio"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
+	enry "github.com/go-enry/go-enry/v2"
 	"github.com/pecodez/couchdev/internal/git"
 )
 
@@ -109,12 +113,82 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// enrich sets computed fields on p (source_missing, plans_dir).
+// enrich sets computed fields on p (source_missing, plans_dir, description, languages).
 func (h *Handler) enrich(p *Project) {
 	if _, err := os.Stat(p.RepoPath); err != nil {
 		p.SourceMissing = true
+		p.PlansDir = h.plansDir(p)
+		return
 	}
 	p.PlansDir = h.plansDir(p)
+	p.Description = readmeDescription(p.RepoPath)
+	p.Languages = detectLanguages(p.RepoPath)
+}
+
+// readmeDescription extracts the first heading or first non-empty line from README.
+func readmeDescription(repoPath string) string {
+	for _, name := range []string{"README.md", "README", "readme.md", "Readme.md"} {
+		f, err := os.Open(filepath.Join(repoPath, name))
+		if err != nil {
+			continue
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		firstHeading, firstLine := "", ""
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			if strings.HasPrefix(line, "#") {
+				text := strings.TrimSpace(strings.TrimLeft(line, "#"))
+				if text != "" {
+					firstHeading = text
+					break
+				}
+				continue
+			}
+			if firstLine == "" {
+				firstLine = line
+			}
+		}
+		if firstHeading != "" {
+			return firstHeading
+		}
+		return firstLine
+	}
+	return ""
+}
+
+// detectLanguages walks the repo and returns a sorted list of unique languages (max 8).
+func detectLanguages(repoPath string) []string {
+	seen := map[string]struct{}{}
+	filepath.WalkDir(repoPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		rel, _ := filepath.Rel(repoPath, path)
+		if enry.IsVendor(rel) || enry.IsDocumentation(rel) || enry.IsTest(rel) {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil || enry.IsBinary(content) || enry.IsGenerated(rel, content) {
+			return nil
+		}
+		if lang := enry.GetLanguage(rel, content); lang != "" {
+			seen[lang] = struct{}{}
+		}
+		return nil
+	})
+	langs := make([]string, 0, len(seen))
+	for l := range seen {
+		langs = append(langs, l)
+	}
+	sort.Strings(langs)
+	if len(langs) > 8 {
+		langs = langs[:8]
+	}
+	return langs
 }
 
 // plansDir returns the effective plans directory for p.
