@@ -44,11 +44,7 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 		cwd = worktreePath
 	}
 	tmuxName := tmux.SessionName(projectName, sessionName)
-	// --dangerously-skip-permissions bypasses claude's per-directory trust prompt,
-	// which would otherwise block the first session in any newly-registered project.
-	// Safe here because these are user-registered directories and the session is
-	// interactive (the user is watching the tmux pane).
-	shellCmd := fmt.Sprintf(`claude --rc "%s" --dangerously-skip-permissions`, canonical)
+	shellCmd := fmt.Sprintf(`claude --rc "%s"`, canonical)
 
 	// Kill any orphaned tmux session with this name before spawning.  This
 	// happens when a previous Genesis attempt created the tmux session but
