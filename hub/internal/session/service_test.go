@@ -2,6 +2,7 @@ package session_test
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 
 	"github.com/pecodez/couchdev/internal/db"
@@ -62,5 +63,31 @@ func TestGenesis_PersistsWhenSessionStaysAlive(t *testing.T) {
 	sessions, _ := ss.ListAll()
 	if len(sessions) != 1 {
 		t.Fatalf("expected 1 session in DB, got %d", len(sessions))
+	}
+}
+
+func TestGenesis_ShellCmdContainsClaude(t *testing.T) {
+	conn := openTestDB(t)
+	ps := project.NewStore(conn)
+	ss := session.NewStore(conn)
+	mock := tmux.NewMock()
+	svc := session.NewService(ps, ss, mock)
+
+	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	if _, err := svc.Genesis("proj", "s1", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(mock.LastCmd, "claude") {
+		t.Errorf("shell cmd %q does not invoke claude", mock.LastCmd)
+	}
+	if !strings.Contains(mock.LastCmd, "proj/s1") {
+		t.Errorf("shell cmd %q does not contain canonical name proj/s1", mock.LastCmd)
+	}
+	if !strings.Contains(mock.LastCmd, "--dangerously-skip-permissions") {
+		t.Errorf("shell cmd %q missing --dangerously-skip-permissions (required to bypass directory trust prompt)", mock.LastCmd)
 	}
 }
