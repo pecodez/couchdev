@@ -38,7 +38,7 @@
           </v-card-text>
 
           <!-- Language chips -->
-          <div v-if="p.languages && p.languages.length" class="px-4 pb-3 d-flex flex-wrap gap-2">
+          <div v-if="p.languages && p.languages.length" class="px-4 pb-3 d-flex flex-wrap gap-3">
             <span v-for="lang in p.languages" :key="lang"
                   class="lang-chip"
                   :style="langChipStyle(lang)">

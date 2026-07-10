@@ -125,7 +125,8 @@ func (h *Handler) enrich(p *Project) {
 	p.Languages = detectLanguages(p.RepoPath)
 }
 
-// readmeDescription extracts the first heading or first non-empty line from README.
+// readmeDescription returns the first real paragraph line from a README,
+// skipping headings, badges, and image lines.
 func readmeDescription(repoPath string) string {
 	for _, name := range []string{"README.md", "README", "readme.md", "Readme.md"} {
 		f, err := os.Open(filepath.Join(repoPath, name))
@@ -134,28 +135,20 @@ func readmeDescription(repoPath string) string {
 		}
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
-		firstHeading, firstLine := "", ""
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if line == "" {
 				continue
 			}
 			if strings.HasPrefix(line, "#") {
-				text := strings.TrimSpace(strings.TrimLeft(line, "#"))
-				if text != "" {
-					firstHeading = text
-					break
-				}
 				continue
 			}
-			if firstLine == "" {
-				firstLine = line
+			// skip badge/image lines
+			if strings.HasPrefix(line, "![") || strings.HasPrefix(line, "[![") {
+				continue
 			}
+			return line
 		}
-		if firstHeading != "" {
-			return firstHeading
-		}
-		return firstLine
 	}
 	return ""
 }
