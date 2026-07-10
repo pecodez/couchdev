@@ -22,7 +22,8 @@
             <v-chip v-if="p.registry && p.registry !== 'custom'"
                     size="x-small" variant="outlined"
                     :prepend-icon="registryIcon(p.registry)"
-                    style="opacity:.75;flex-shrink:0;">
+                    :href="p.repo_url" target="_blank" rel="noopener"
+                    style="opacity:.75;flex-shrink:0;cursor:pointer;">
               {{ p.registry }}
             </v-chip>
             <v-icon v-if="p.source_missing" size="16" color="warning" title="Source directory missing">
