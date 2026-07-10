@@ -15,7 +15,7 @@ import (
 func New(tokenHash []byte, db *sql.DB, t tmux.Client, webFS fs.FS, projectsDir string, g git.Client) http.Handler {
 	ps := project.NewStore(db)
 	ss := session.NewStore(db)
-	svc := session.NewService(ps, ss, t)
+	svc := session.NewService(ps, ss, t, g)
 
 	apiMux := http.NewServeMux()
 	project.NewHandler(ps, projectsDir, g).Register(apiMux)

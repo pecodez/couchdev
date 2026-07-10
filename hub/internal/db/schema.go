@@ -32,4 +32,7 @@ var migrations = []string{
 	`ALTER TABLE projects ADD COLUMN registry    TEXT NOT NULL DEFAULT ''`,
 	// v2: committable plans path (empty = hub default outside src/)
 	`ALTER TABLE projects ADD COLUMN plans_path TEXT NOT NULL DEFAULT ''`,
+	// v3: worktree-per-session — branch and worktree path stored on session
+	`ALTER TABLE sessions ADD COLUMN branch        TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE sessions ADD COLUMN worktree_path TEXT NOT NULL DEFAULT ''`,
 }
