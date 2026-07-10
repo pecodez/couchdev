@@ -5,7 +5,7 @@
         <div class="text-h6" style="color:#e8e8e8;font-weight:600;">Projects</div>
       </v-col>
       <v-col cols="auto">
-        <v-btn prepend-icon="mdi-plus" variant="tonal" size="small" @click="dialog = true">
+        <v-btn prepend-icon="mdi-plus" variant="flat" size="small" color="primary" @click="dialog = true">
           New project
         </v-btn>
       </v-col>
@@ -13,9 +13,8 @@
 
     <v-alert v-if="error" type="error" density="compact" class="mb-4">{{ error }}</v-alert>
 
-    <v-row v-if="projects.length">
-      <v-col v-for="p in projects" :key="p.id" cols="12" md="6" lg="4">
-        <v-card class="project-card h-100" :style="cardStyle(p)">
+    <div v-if="projects.length">
+      <v-card v-for="p in projects" :key="p.id" class="project-card mb-3" :style="cardStyle(p)">
 
           <!-- Header row: name + registry badge -->
           <v-card-title class="pt-4 pb-1 d-flex align-center justify-space-between flex-wrap gap-2">
@@ -23,7 +22,8 @@
             <v-chip v-if="p.registry && p.registry !== 'custom'"
                     size="x-small" variant="outlined"
                     :prepend-icon="registryIcon(p.registry)"
-                    style="opacity:.75;flex-shrink:0;">
+                    :href="p.repo_url" target="_blank" rel="noopener"
+                    style="opacity:.75;flex-shrink:0;cursor:pointer;">
               {{ p.registry }}
             </v-chip>
             <v-icon v-if="p.source_missing" size="16" color="warning" title="Source directory missing">
@@ -39,7 +39,7 @@
           </v-card-text>
 
           <!-- Language chips -->
-          <div v-if="p.languages && p.languages.length" class="px-4 pb-3 d-flex flex-wrap gap-1">
+          <div v-if="p.languages && p.languages.length" class="px-4 pb-3 d-flex flex-wrap" style="gap:10px;">
             <span v-for="lang in p.languages" :key="lang"
                   class="lang-chip"
                   :style="langChipStyle(lang)">
@@ -69,8 +69,7 @@
           </v-expansion-panels>
 
         </v-card>
-      </v-col>
-    </v-row>
+    </div>
 
     <div v-else-if="!error" class="text-medium-emphasis text-body-2 mt-4">
       No projects yet. Create one to get started.
@@ -162,7 +161,6 @@ function cardStyle(p) {
   font-size: 1rem;
   font-weight: 600;
   color: #e8e8e8;
-  max-width: 200px;
 }
 .description {
   display: -webkit-box;

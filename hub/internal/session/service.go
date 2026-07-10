@@ -2,7 +2,9 @@ package session
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pecodez/couchdev/internal/git"
@@ -43,12 +45,18 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 	if cwd == "" {
 		cwd = worktreePath
 	}
+
+	// Pre-create the Claude project-state directory so subsequent sessions at
+	// the same worktree path have a known entry; Claude populates it after the
+	// first trust acceptance.
+	if home, err := os.UserHomeDir(); err == nil {
+		slug := strings.ReplaceAll(worktreePath, "/", "-")
+		trustDir := filepath.Join(home, ".claude", "projects", slug)
+		_ = os.MkdirAll(trustDir, 0700)
+	}
+
 	tmuxName := tmux.SessionName(projectName, sessionName)
-	// --dangerously-skip-permissions bypasses claude's per-directory trust prompt,
-	// which would otherwise block the first session in any newly-registered project.
-	// Safe here because these are user-registered directories and the session is
-	// interactive (the user is watching the tmux pane).
-	shellCmd := fmt.Sprintf(`claude --rc "%s" --dangerously-skip-permissions`, canonical)
+	shellCmd := fmt.Sprintf(`claude --dangerously-skip-permissions --rc "%s"`, canonical)
 
 	// Kill any orphaned tmux session with this name before spawning.  This
 	// happens when a previous Genesis attempt created the tmux session but
@@ -67,6 +75,34 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 	time.Sleep(300 * time.Millisecond)
 	if !svc.tmux.HasSession(tmuxName) {
 		return nil, fmt.Errorf("session exited immediately after spawn — is claude installed and in PATH?")
+	}
+
+	// Claude shows a workspace-trust dialog for directories it hasn't seen
+	// before.  It appears in the terminal before the RC bridge is up so it
+	// can't be accepted via the mobile app.  Poll the pane until we see the
+	// dialog ("I trust this folder" is option 1, pre-selected) then send
+	// Enter.  If the path is already trusted the dialog won't appear and
+	// Claude prints its header instead — either way we stop polling.
+	const (
+		trustPoll     = 500 * time.Millisecond
+		trustAttempts = 20 // 10 s max
+	)
+	for i := 0; i < trustAttempts; i++ {
+		time.Sleep(trustPoll)
+		if !svc.tmux.HasSession(tmuxName) {
+			return nil, fmt.Errorf("session exited while waiting for Claude startup")
+		}
+		pane, err := svc.tmux.CapturePane(tmuxName)
+		if err != nil {
+			continue
+		}
+		if strings.Contains(pane, "I trust this folder") {
+			_ = svc.tmux.SendKeys(tmuxName)
+			break
+		}
+		if strings.Contains(pane, "Claude Code") {
+			break // already trusted — Claude started without the dialog
+		}
 	}
 
 	sess, err := svc.sessions.Create(Session{

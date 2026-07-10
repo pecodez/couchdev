@@ -16,6 +16,16 @@ import (
 )
 
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+var mdBlockquote = regexp.MustCompile(`^\s*>\s*`)
+var mdLink = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
+var mdEmphasis = regexp.MustCompile(`\*\*|__|\*|_|` + "`")
+
+func stripMarkdown(s string) string {
+	s = mdBlockquote.ReplaceAllString(s, "")
+	s = mdLink.ReplaceAllString(s, "$1")
+	s = mdEmphasis.ReplaceAllString(s, "")
+	return strings.TrimSpace(s)
+}
 
 type Handler struct {
 	store       *Store
@@ -125,7 +135,8 @@ func (h *Handler) enrich(p *Project) {
 	p.Languages = detectLanguages(p.RepoPath)
 }
 
-// readmeDescription extracts the first heading or first non-empty line from README.
+// readmeDescription returns the first real paragraph line from a README,
+// skipping headings, badges, and image lines.
 func readmeDescription(repoPath string) string {
 	for _, name := range []string{"README.md", "README", "readme.md", "Readme.md"} {
 		f, err := os.Open(filepath.Join(repoPath, name))
@@ -134,28 +145,20 @@ func readmeDescription(repoPath string) string {
 		}
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
-		firstHeading, firstLine := "", ""
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if line == "" {
 				continue
 			}
 			if strings.HasPrefix(line, "#") {
-				text := strings.TrimSpace(strings.TrimLeft(line, "#"))
-				if text != "" {
-					firstHeading = text
-					break
-				}
 				continue
 			}
-			if firstLine == "" {
-				firstLine = line
+			// skip badge/image lines
+			if strings.HasPrefix(line, "![") || strings.HasPrefix(line, "[![") {
+				continue
 			}
+			return stripMarkdown(line)
 		}
-		if firstHeading != "" {
-			return firstHeading
-		}
-		return firstLine
 	}
 	return ""
 }

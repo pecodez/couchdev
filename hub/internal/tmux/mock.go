@@ -43,3 +43,6 @@ func (m *Mock) ListSessions() ([]string, error) {
 	}
 	return names, nil
 }
+
+func (m *Mock) SendKeys(name string) error         { return nil }
+func (m *Mock) CapturePane(name string) (string, error) { return "", nil }

@@ -1,6 +1,6 @@
 export PATH := $(PATH):/usr/local/go/bin
 
-.PHONY: build build-go build-web build-release install release-patch release-minor release-major clean
+.PHONY: build build-go build-web build-release dev install release-patch release-minor release-major clean
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GO_LDFLAGS := -X main.version=$(VERSION)
@@ -27,9 +27,12 @@ release-minor:
 release-major:
 	@bash release.sh major
 
+dev:
+	@bash dev.sh
+
 # Bare-metal install using the locally-built binary. Run `make build` first.
 install: build
 	@bash install.sh --local-bin bin/couchdev
 
 clean:
-	rm -rf bin/ web/dist/ web/node_modules/
+	rm -rf bin/ .dev-run/ web/dist/ web/node_modules/
