@@ -5,7 +5,7 @@
         <div class="text-h6" style="color:#e8e8e8;font-weight:600;">Projects</div>
       </v-col>
       <v-col cols="auto">
-        <v-btn prepend-icon="mdi-plus" variant="tonal" size="small" @click="dialog = true">
+        <v-btn prepend-icon="mdi-plus" variant="tonal" size="small" color="primary" @click="dialog = true">
           New project
         </v-btn>
       </v-col>
