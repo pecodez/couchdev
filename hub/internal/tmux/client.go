@@ -22,8 +22,10 @@ type Client interface {
 }
 
 // SessionName returns the tmux session name for a project/session pair.
+// Underscores are used as separators because tmux silently converts dots to
+// underscores in session names, which would cause HasSession to always miss.
 func SessionName(project, session string) string {
-	return "cdv." + project + "." + session
+	return "cdv_" + project + "_" + session
 }
 
 // Exec is the production Client that shells out to tmux.
