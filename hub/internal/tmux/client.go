@@ -19,6 +19,8 @@ type Client interface {
 	KillSession(name string) error
 	HasSession(name string) bool
 	ListSessions() ([]string, error)
+	SendKeys(name string) error
+	CapturePane(name string) (string, error)
 }
 
 // SessionName returns the tmux session name for a project/session pair.
@@ -53,6 +55,24 @@ func (Exec) KillSession(name string) error {
 
 func (Exec) HasSession(name string) bool {
 	return exec.Command("tmux", "has-session", "-t", name).Run() == nil
+}
+
+func (Exec) SendKeys(name string) error {
+	cmd := exec.Command("tmux", "send-keys", "-t", name, "Enter")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("tmux send-keys: %w: %s", err, stderr.String())
+	}
+	return nil
+}
+
+func (Exec) CapturePane(name string) (string, error) {
+	out, err := exec.Command("tmux", "capture-pane", "-t", name, "-p").Output()
+	if err != nil {
+		return "", fmt.Errorf("tmux capture-pane: %w", err)
+	}
+	return string(out), nil
 }
 
 func (Exec) ListSessions() ([]string, error) {
