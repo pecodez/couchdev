@@ -22,24 +22,26 @@
 
     <v-main>
       <v-container fluid class="pa-4">
-        <ProjectList v-if="authed" />
-        <v-row v-else justify="center">
-          <v-col cols="12" sm="8" md="5" lg="4">
-            <v-card class="mt-8">
-              <v-card-title class="pt-5">Connect to hub</v-card-title>
-              <v-card-text>
-                <v-text-field v-model="inputToken" label="Bearer token" type="password"
-                              variant="outlined" density="comfortable"
-                              :error-messages="tokenError" @keyup.enter="saveToken" />
-              </v-card-text>
-              <v-card-actions class="px-4 pb-4">
-                <v-btn color="primary" variant="flat" block :loading="verifying" @click="saveToken">
-                  Connect
-                </v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-col>
-        </v-row>
+        <div style="max-width:860px;margin:0 auto;width:100%;">
+          <ProjectList v-if="authed" />
+          <v-row v-else justify="center">
+            <v-col cols="12" sm="8" md="5" lg="4">
+              <v-card class="mt-8">
+                <v-card-title class="pt-5">Connect to hub</v-card-title>
+                <v-card-text>
+                  <v-text-field v-model="inputToken" label="Bearer token" type="password"
+                                variant="outlined" density="comfortable"
+                                :error-messages="tokenError" @keyup.enter="saveToken" />
+                </v-card-text>
+                <v-card-actions class="px-4 pb-4">
+                  <v-btn color="primary" variant="flat" block :loading="verifying" @click="saveToken">
+                    Connect
+                  </v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-col>
+          </v-row>
+        </div>
       </v-container>
     </v-main>
 

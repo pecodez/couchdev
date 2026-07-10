@@ -13,9 +13,8 @@
 
     <v-alert v-if="error" type="error" density="compact" class="mb-4">{{ error }}</v-alert>
 
-    <v-row v-if="projects.length">
-      <v-col v-for="p in projects" :key="p.id" cols="12" md="6" lg="4">
-        <v-card class="project-card h-100" :style="cardStyle(p)">
+    <div v-if="projects.length">
+      <v-card v-for="p in projects" :key="p.id" class="project-card mb-3" :style="cardStyle(p)">
 
           <!-- Header row: name + registry badge -->
           <v-card-title class="pt-4 pb-1 d-flex align-center justify-space-between flex-wrap gap-2">
@@ -39,7 +38,7 @@
           </v-card-text>
 
           <!-- Language chips -->
-          <div v-if="p.languages && p.languages.length" class="px-4 pb-3 d-flex flex-wrap gap-1">
+          <div v-if="p.languages && p.languages.length" class="px-4 pb-3 d-flex flex-wrap gap-2">
             <span v-for="lang in p.languages" :key="lang"
                   class="lang-chip"
                   :style="langChipStyle(lang)">
@@ -69,8 +68,7 @@
           </v-expansion-panels>
 
         </v-card>
-      </v-col>
-    </v-row>
+    </div>
 
     <div v-else-if="!error" class="text-medium-emphasis text-body-2 mt-4">
       No projects yet. Create one to get started.
@@ -162,7 +160,6 @@ function cardStyle(p) {
   font-size: 1rem;
   font-weight: 600;
   color: #e8e8e8;
-  max-width: 200px;
 }
 .description {
   display: -webkit-box;
