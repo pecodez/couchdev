@@ -76,21 +76,26 @@ if ! command -v claude &>/dev/null; then
 fi
 
 # On Debian/Ubuntu, libsecret-1-0 is required for Claude Code to persist OAuth credentials
-# in the keyring. Without it the remote-control bridge token is not stored and remote
-# control may stop working after the process restarts.
+# in the keyring. Without it the remote-control bridge token is not stored between restarts
+# and remote control will silently fail.
 if command -v dpkg &>/dev/null; then
   if ! dpkg -l libsecret-1-0 2>/dev/null | grep -q "^ii"; then
-    echo "warning: libsecret not found — Claude Code cannot persist credentials in the keyring" >&2
-    echo "         Install with: sudo apt install libsecret-1-0 gnome-keyring" >&2
+    echo "error: libsecret-1-0 is not installed — Claude Code cannot persist OAuth credentials" >&2
+    echo "" >&2
+    echo "       Install it first, then re-run this installer:" >&2
+    echo "" >&2
+    echo "         sudo apt install libsecret-1-0 gnome-keyring" >&2
+    echo "" >&2
+    exit 1
   fi
 fi
 
 # Check whether Claude Code has been authenticated. Remote control (the feature that lets
 # you connect to sessions from Claude mobile) requires a valid login — it will silently
 # fail if this step is skipped.
+_EMAIL=""
 if command -v python3 &>/dev/null && command -v claude &>/dev/null; then
   _CLAUDE_JSON="${HOME}/.claude.json"
-  _EMAIL=""
   if [[ -f "$_CLAUDE_JSON" ]]; then
     _EMAIL=$(python3 -c "
 import json, sys
@@ -255,7 +260,8 @@ Bearer token (add this in the Claude android app):
 EOF
 fi
 
-cat <<EOF
+if [[ -z "$_EMAIL" ]]; then
+  cat <<EOF
 Next steps:
 
 1. Authenticate Claude Code (required for remote control):
@@ -267,3 +273,13 @@ Next steps:
    couchdev serve --config ${CONFIG_FILE}
 
 EOF
+else
+  cat <<EOF
+Next steps:
+
+Start couchdev:
+
+   couchdev serve --config ${CONFIG_FILE}
+
+EOF
+fi

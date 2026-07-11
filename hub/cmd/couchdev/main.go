@@ -36,7 +36,13 @@ func main() {
 		Use:   "serve",
 		Short: "Start the API server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			log, _ := zap.NewProduction()
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			var log *zap.Logger
+			if verbose {
+				log, _ = zap.NewDevelopment()
+			} else {
+				log, _ = zap.NewProduction()
+			}
 			defer log.Sync()
 
 			cfg, err := config.Load(configPath)
@@ -55,7 +61,7 @@ func main() {
 
 			runDiscovery(cfg.ProjectsDir, project.NewStore(conn), log)
 
-			handler := api.New(tokenHash, conn, tmux.Exec{}, couchdev.WebFS, cfg.ProjectsDir, git.Real{})
+			handler := api.New(tokenHash, conn, tmux.NewExec(log), couchdev.WebFS, cfg.ProjectsDir, git.Real{}, log)
 			log.Info("starting", zap.String("addr", cfg.ListenAddr))
 			if cfg.TLSCert != "" && cfg.TLSKey != "" {
 				return http.ListenAndServeTLS(cfg.ListenAddr, cfg.TLSCert, cfg.TLSKey, handler)
@@ -64,6 +70,7 @@ func main() {
 			return http.ListenAndServe(cfg.ListenAddr, handler)
 		},
 	}
+	serveCmd.Flags().BoolP("verbose", "v", false, "enable verbose debug logging")
 
 	tokenCmd := &cobra.Command{Use: "token", Short: "Token management"}
 	tokenGenCmd := &cobra.Command{

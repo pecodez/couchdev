@@ -1,11 +1,15 @@
 package session
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/pecodez/couchdev/internal/git"
 	"github.com/pecodez/couchdev/internal/project"
@@ -17,13 +21,53 @@ type Service struct {
 	sessions *Store
 	tmux     tmux.Client
 	git      git.Client
+	log      *zap.Logger
 }
 
-func NewService(projects *project.Store, sessions *Store, t tmux.Client, g git.Client) *Service {
-	return &Service{projects: projects, sessions: sessions, tmux: t, git: g}
+func NewService(projects *project.Store, sessions *Store, t tmux.Client, g git.Client, log *zap.Logger) *Service {
+	return &Service{projects: projects, sessions: sessions, tmux: t, git: g, log: log}
+}
+
+// checkClaudeBridge reads ~/.claude.json and returns an error if Claude Code
+// is not authenticated or the remote-control bridge is in a backoff period.
+func checkClaudeBridge() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil // can't determine home dir — skip check
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".claude.json"))
+	if err != nil {
+		return nil // file absent — first run, proceed and let Claude report the error
+	}
+	var cfg struct {
+		OauthAccount        *json.RawMessage `json:"oauthAccount"`
+		BridgeDeadExpiresAt int64            `json:"bridgeOauthDeadExpiresAt"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil // unreadable — skip check
+	}
+	if cfg.OauthAccount == nil {
+		return errors.New("Claude Code is not authenticated — run 'claude login' first")
+	}
+	if cfg.BridgeDeadExpiresAt > time.Now().UnixMilli() {
+		exp := time.UnixMilli(cfg.BridgeDeadExpiresAt).UTC().Format(time.RFC3339)
+		return fmt.Errorf("remote control bridge is in backoff until %s — run 'claude login' to reset it", exp)
+	}
+	return nil
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, error) {
+	if err := checkClaudeBridge(); err != nil {
+		return nil, err
+	}
+
 	proj, err := svc.projects.GetByName(projectName)
 	if err != nil {
 		return nil, fmt.Errorf("project %q not found: %w", projectName, err)
@@ -58,6 +102,14 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 	tmuxName := tmux.SessionName(projectName, sessionName)
 	shellCmd := fmt.Sprintf(`claude --dangerously-skip-permissions --rc "%s"`, canonical)
 
+	svc.log.Info("genesis: spawning session",
+		zap.String("canonical", canonical),
+		zap.String("tmux_name", tmuxName),
+		zap.String("cwd", cwd),
+		zap.String("shell_cmd", shellCmd),
+		zap.String("worktree", worktreePath),
+	)
+
 	// Kill any orphaned tmux session with this name before spawning.  This
 	// happens when a previous Genesis attempt created the tmux session but
 	// failed (or the DB was reset) before the record was committed, leaving
@@ -69,6 +121,7 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 	if err := svc.tmux.NewSession(tmuxName, cwd, shellCmd); err != nil {
 		return nil, fmt.Errorf("spawn session: %w", err)
 	}
+	svc.log.Info("genesis: tmux session created", zap.String("tmux_name", tmuxName))
 
 	// tmux new-session -d always exits 0; give the process a moment to fail
 	// fast (e.g. claude not in PATH) before we commit the record.
@@ -77,16 +130,12 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 		return nil, fmt.Errorf("session exited immediately after spawn — is claude installed and in PATH?")
 	}
 
-	// Claude shows a workspace-trust dialog for directories it hasn't seen
-	// before.  It appears in the terminal before the RC bridge is up so it
-	// can't be accepted via the mobile app.  Poll the pane until we see the
-	// dialog ("I trust this folder" is option 1, pre-selected) then send
-	// Enter.  If the path is already trusted the dialog won't appear and
-	// Claude prints its header instead — either way we stop polling.
+	// Poll pane for workspace-trust dialog or Claude startup header.
 	const (
 		trustPoll     = 500 * time.Millisecond
 		trustAttempts = 20 // 10 s max
 	)
+	trustedOrStarted := false
 	for i := 0; i < trustAttempts; i++ {
 		time.Sleep(trustPoll)
 		if !svc.tmux.HasSession(tmuxName) {
@@ -94,15 +143,71 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 		}
 		pane, err := svc.tmux.CapturePane(tmuxName)
 		if err != nil {
+			svc.log.Warn("trust poll: capture-pane error", zap.Int("attempt", i), zap.Error(err))
 			continue
 		}
+		svc.log.Debug("trust poll: pane snapshot",
+			zap.Int("attempt", i),
+			zap.String("pane", truncate(pane, 500)),
+		)
 		if strings.Contains(pane, "I trust this folder") {
+			svc.log.Info("trust poll: trust dialog detected — sending Enter", zap.Int("attempt", i))
 			_ = svc.tmux.SendKeys(tmuxName)
+			trustedOrStarted = true
 			break
 		}
 		if strings.Contains(pane, "Claude Code") {
-			break // already trusted — Claude started without the dialog
+			svc.log.Info("trust poll: Claude started (already trusted)", zap.Int("attempt", i))
+			trustedOrStarted = true
+			break
 		}
+	}
+	if !trustedOrStarted {
+		svc.log.Warn("trust poll: timed out — session may be stuck at trust dialog or startup")
+	}
+
+	// Poll pane for remote-control confirmation or errors.
+	// Claude Code outputs RC status after startup; we watch for known patterns.
+	const (
+		rcPoll     = 500 * time.Millisecond
+		rcAttempts = 30 // 15 s max
+	)
+	var warnings []string
+	rcConfirmed := false
+	for i := 0; i < rcAttempts; i++ {
+		time.Sleep(rcPoll)
+		if !svc.tmux.HasSession(tmuxName) {
+			svc.log.Warn("rc poll: session exited before RC could be confirmed")
+			warnings = append(warnings, "session exited before remote control could be confirmed")
+			break
+		}
+		pane, err := svc.tmux.CapturePane(tmuxName)
+		if err != nil {
+			continue
+		}
+		lower := strings.ToLower(pane)
+		svc.log.Debug("rc poll: pane snapshot",
+			zap.Int("attempt", i),
+			zap.String("pane", truncate(pane, 500)),
+		)
+		if strings.Contains(lower, "remote control") || strings.Contains(lower, "remotely") {
+			svc.log.Info("rc poll: remote control confirmed", zap.Int("attempt", i), zap.String("pane_excerpt", truncate(pane, 200)))
+			rcConfirmed = true
+			break
+		}
+		if strings.Contains(lower, "not authenticated") || strings.Contains(lower, "oauth") ||
+			strings.Contains(lower, "unauthorized") || strings.Contains(lower, "bridge") {
+			svc.log.Warn("rc poll: error pattern detected in pane",
+				zap.Int("attempt", i),
+				zap.String("pane_excerpt", truncate(pane, 500)),
+			)
+			warnings = append(warnings, "remote control error detected — check 'claude login' status and couchdev logs")
+			break
+		}
+	}
+	if !rcConfirmed && len(warnings) == 0 {
+		svc.log.Warn("rc poll: no remote control confirmation after 15s", zap.String("tmux_name", tmuxName))
+		warnings = append(warnings, "remote control not confirmed after 15s — session is running but may not appear in Claude mobile; check couchdev --verbose logs")
 	}
 
 	sess, err := svc.sessions.Create(Session{
@@ -116,11 +221,17 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 		TmuxName:      tmuxName,
 	})
 	if err != nil {
-		svc.tmux.KillSession(tmuxName)                       // best-effort rollback
-		svc.git.WorktreeRemove(proj.RepoPath, worktreePath)  // best-effort rollback
+		svc.tmux.KillSession(tmuxName)                      // best-effort rollback
+		svc.git.WorktreeRemove(proj.RepoPath, worktreePath) // best-effort rollback
 		return nil, fmt.Errorf("persist session: %w", err)
 	}
 	sess.State = StateStarting
+	sess.Warnings = warnings
+	svc.log.Info("genesis: session persisted",
+		zap.Int64("id", sess.ID),
+		zap.String("canonical", canonical),
+		zap.Strings("warnings", warnings),
+	)
 	return sess, nil
 }
 
@@ -190,6 +301,10 @@ func (svc *Service) Changes(projectName, sessionName string) (int, []string, err
 }
 
 func (svc *Service) Resume(projectName, sessionName string) (*Session, error) {
+	if err := checkClaudeBridge(); err != nil {
+		return nil, err
+	}
+
 	canonical := projectName + "/" + sessionName
 	sess, err := svc.sessions.GetByCanonical(canonical)
 	if err != nil {
@@ -201,7 +316,14 @@ func (svc *Service) Resume(projectName, sessionName string) (*Session, error) {
 	if svc.tmux.HasSession(sess.TmuxName) {
 		return nil, fmt.Errorf("session %q is already live", canonical)
 	}
+
 	shellCmd := fmt.Sprintf(`claude --rc "%s" --dangerously-skip-permissions`, canonical)
+	svc.log.Info("resume: spawning session",
+		zap.String("canonical", canonical),
+		zap.String("tmux_name", sess.TmuxName),
+		zap.String("shell_cmd", shellCmd),
+	)
+
 	if err := svc.tmux.NewSession(sess.TmuxName, sess.CWD, shellCmd); err != nil {
 		return nil, fmt.Errorf("spawn session: %w", err)
 	}
@@ -209,6 +331,7 @@ func (svc *Service) Resume(projectName, sessionName string) (*Session, error) {
 	if !svc.tmux.HasSession(sess.TmuxName) {
 		return nil, fmt.Errorf("session exited immediately after spawn — is claude installed and in PATH?")
 	}
+	svc.log.Info("resume: session started", zap.String("canonical", canonical))
 	sess.State = StateStarting
 	return sess, nil
 }

@@ -16,6 +16,8 @@
             <v-chip :color="stateColor(s.state)" size="x-small">{{ s.state }}</v-chip>
             <v-chip v-if="s.branch" size="x-small" variant="outlined"
                     prepend-icon="mdi-source-branch">{{ s.branch }}</v-chip>
+            <v-chip v-if="s.warnings && s.warnings.length" color="warning" size="x-small"
+                    prepend-icon="mdi-alert-outline" :title="s.warnings.join('\n')">RC warning</v-chip>
           </div>
           <template #actions>
             <template v-if="s.state === 'resumable'">
