@@ -25,4 +25,5 @@ type Session struct {
 	Killed        bool      `json:"-"`
 	StartedAt     time.Time `json:"started_at"`
 	State         State     `json:"state"`
+	Warnings      []string  `json:"warnings,omitempty"`
 }

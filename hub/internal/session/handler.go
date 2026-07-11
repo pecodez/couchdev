@@ -4,11 +4,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
-type Handler struct{ svc *Service }
+type Handler struct {
+	svc *Service
+	log *zap.Logger
+}
 
-func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
+func NewHandler(svc *Service, log *zap.Logger) *Handler { return &Handler{svc: svc, log: log} }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /projects/{project}/sessions", h.genesis)
@@ -20,6 +25,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 }
 
 func (h *Handler) genesis(w http.ResponseWriter, r *http.Request) {
+	h.log.Info("POST genesis", zap.String("project", r.PathValue("project")))
 	var req struct {
 		Session string `json:"session"`
 		CWD     string `json:"cwd"`
@@ -34,21 +40,27 @@ func (h *Handler) genesis(w http.ResponseWriter, r *http.Request) {
 	}
 	sess, err := h.svc.Genesis(r.PathValue("project"), req.Session, req.CWD)
 	if err != nil {
+		h.log.Warn("genesis failed", zap.String("project", r.PathValue("project")), zap.String("session", req.Session), zap.Error(err))
 		code := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "not found") {
+		msg := err.Error()
+		if strings.Contains(msg, "not found") {
 			code = http.StatusNotFound
-		} else if strings.Contains(err.Error(), "already live") {
+		} else if strings.Contains(msg, "already live") {
 			code = http.StatusConflict
+		} else if strings.Contains(msg, "not authenticated") || strings.Contains(msg, "backoff") {
+			code = http.StatusUnprocessableEntity
 		}
-		http.Error(w, err.Error(), code)
+		http.Error(w, msg, code)
 		return
 	}
+	h.log.Info("genesis ok", zap.String("canonical", sess.CanonicalName), zap.Strings("warnings", sess.Warnings))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(sess)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	h.log.Info("GET sessions")
 	sessions, err := h.svc.List()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -106,6 +118,7 @@ func (h *Handler) changes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) teardown(w http.ResponseWriter, r *http.Request) {
+	h.log.Info("DELETE session", zap.String("project", r.PathValue("project")), zap.String("session", r.PathValue("session")))
 	if err := h.svc.Teardown(r.PathValue("project"), r.PathValue("session")); err != nil {
 		code := http.StatusInternalServerError
 		if strings.Contains(err.Error(), "not found") {
@@ -118,17 +131,22 @@ func (h *Handler) teardown(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) resume(w http.ResponseWriter, r *http.Request) {
+	h.log.Info("POST resume", zap.String("project", r.PathValue("project")), zap.String("session", r.PathValue("session")))
 	sess, err := h.svc.Resume(r.PathValue("project"), r.PathValue("session"))
 	if err != nil {
+		h.log.Warn("resume failed", zap.Error(err))
 		code := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "not found") {
+		msg := err.Error()
+		if strings.Contains(msg, "not found") {
 			code = http.StatusNotFound
-		} else if strings.Contains(err.Error(), "already live") {
+		} else if strings.Contains(msg, "already live") {
 			code = http.StatusConflict
-		} else if strings.Contains(err.Error(), "is dead") {
+		} else if strings.Contains(msg, "is dead") {
+			code = http.StatusUnprocessableEntity
+		} else if strings.Contains(msg, "not authenticated") || strings.Contains(msg, "backoff") {
 			code = http.StatusUnprocessableEntity
 		}
-		http.Error(w, err.Error(), code)
+		http.Error(w, msg, code)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

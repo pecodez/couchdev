@@ -6,9 +6,15 @@
       <v-card-text>
         <v-text-field v-model="sessionName" label="Session name" hint="e.g. auth-refactor" />
         <v-text-field v-model="cwd" label="Working directory" hint="Defaults to project repo path" />
-        <v-alert v-if="result" type="success" density="compact">
-          <strong>{{ result.canonical_name }}</strong> created ({{ result.state }}) — find it in the Claude app.
-        </v-alert>
+        <template v-if="result">
+          <v-alert v-if="result.warnings && result.warnings.length" type="warning" density="compact" class="mb-2">
+            <div><strong>{{ result.canonical_name }}</strong> started — but remote control may not be active.</div>
+            <div v-for="w in result.warnings" :key="w" class="mt-1 text-caption">{{ w }}</div>
+          </v-alert>
+          <v-alert v-else type="success" density="compact">
+            <strong>{{ result.canonical_name }}</strong> created ({{ result.state }}) — find it in the Claude app.
+          </v-alert>
+        </template>
         <v-alert v-if="error" type="error" density="compact">{{ error }}</v-alert>
       </v-card-text>
       <v-card-actions>
