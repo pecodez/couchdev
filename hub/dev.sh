@@ -48,6 +48,8 @@ if [[ -f "$CLAUDE_SRC" ]] && [[ ! -f "$PROJECTS_DIR/CLAUDE.md" ]]; then
   cp "$CLAUDE_SRC" "$PROJECTS_DIR/CLAUDE.md"
 fi
 
+TOKEN_FILE="$DEV_DIR/etc/token"
+
 if [[ ! -f "$CONFIG" ]]; then
   echo "→ generating dev config and token..."
   TOKEN_OUTPUT=$("$BIN" token generate)
@@ -61,14 +63,22 @@ if [[ ! -f "$CONFIG" ]]; then
   "token_hash": "${TOKEN_HASH}"
 }
 EOF
-  echo ""
-  echo "  ┌─────────────────────────────────────────────────────┐"
-  echo "  │ Bearer token (save this — it won't be shown again): │"
-  echo "  │                                                     │"
-  echo "  │   $TOKEN  │"
-  echo "  └─────────────────────────────────────────────────────┘"
-  echo ""
+  echo "$TOKEN" > "$TOKEN_FILE"
 fi
+
+print_token() {
+  if [[ -f "$TOKEN_FILE" ]]; then
+    local tok
+    tok=$(cat "$TOKEN_FILE")
+    echo ""
+    echo "  ┌─────────────────────────────────────────────────────┐"
+    echo "  │ Bearer token:                                       │"
+    echo "  │                                                     │"
+    echo "  │   $tok  │"
+    echo "  └─────────────────────────────────────────────────────┘"
+    echo ""
+  fi
+}
 
 # ── register projects dir as trusted in Claude settings ───────────────────────
 
@@ -118,11 +128,7 @@ echo "→ starting frontend dev server on :5174..."
 npm --prefix "$SCRIPT_DIR/web" run dev -- --host --port 5174 &
 FRONTEND_PID=$!
 
-echo ""
-echo "  Hub UI → http://localhost:5174"
-echo "  API    → http://localhost:8443"
-echo ""
-echo "  Press Ctrl+C to stop."
-echo ""
+# Wait for Vite to finish its screen-clear and URL banner, then reprint the token.
+(sleep 3 && print_token) &
 
 wait "$BACKEND_PID" "$FRONTEND_PID"
