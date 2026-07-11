@@ -100,7 +100,7 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 	}
 
 	tmuxName := tmux.SessionName(projectName, sessionName)
-	shellCmd := fmt.Sprintf(`claude --dangerously-skip-permissions --rc "%s"`, canonical)
+	shellCmd := fmt.Sprintf(`claude --rc "%s"`, canonical)
 
 	svc.log.Info("genesis: spawning session",
 		zap.String("canonical", canonical),
@@ -190,7 +190,7 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 			zap.Int("attempt", i),
 			zap.String("pane", truncate(pane, 500)),
 		)
-		if strings.Contains(lower, "remote control") || strings.Contains(lower, "remotely") {
+		if strings.Contains(lower, "remote control") || strings.Contains(lower, "remote-control") || strings.Contains(lower, "remotely") {
 			svc.log.Info("rc poll: remote control confirmed", zap.Int("attempt", i), zap.String("pane_excerpt", truncate(pane, 200)))
 			rcConfirmed = true
 			break
@@ -317,7 +317,7 @@ func (svc *Service) Resume(projectName, sessionName string) (*Session, error) {
 		return nil, fmt.Errorf("session %q is already live", canonical)
 	}
 
-	shellCmd := fmt.Sprintf(`claude --rc "%s" --dangerously-skip-permissions`, canonical)
+	shellCmd := fmt.Sprintf(`claude --rc "%s"`, canonical)
 	svc.log.Info("resume: spawning session",
 		zap.String("canonical", canonical),
 		zap.String("tmux_name", sess.TmuxName),
