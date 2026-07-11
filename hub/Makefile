@@ -1,4 +1,4 @@
-export PATH := $(PATH):/usr/local/go/bin
+export PATH := $(PATH):/usr/local/go/bin:$(HOME)/go-sdk/go/bin
 
 .PHONY: build build-go build-web build-release dev install release-patch release-minor release-major clean
 
