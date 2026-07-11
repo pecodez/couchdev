@@ -75,6 +75,41 @@ if ! command -v claude &>/dev/null; then
   echo "         See https://claude.ai/code to install Claude Code" >&2
 fi
 
+# On Debian/Ubuntu, libsecret-1-0 is required for Claude Code to persist OAuth credentials
+# in the keyring. Without it the remote-control bridge token is not stored and remote
+# control may stop working after the process restarts.
+if command -v dpkg &>/dev/null; then
+  if ! dpkg -l libsecret-1-0 2>/dev/null | grep -q "^ii"; then
+    echo "warning: libsecret not found — Claude Code cannot persist credentials in the keyring" >&2
+    echo "         Install with: sudo apt install libsecret-1-0 gnome-keyring" >&2
+  fi
+fi
+
+# Check whether Claude Code has been authenticated. Remote control (the feature that lets
+# you connect to sessions from Claude mobile) requires a valid login — it will silently
+# fail if this step is skipped.
+if command -v python3 &>/dev/null && command -v claude &>/dev/null; then
+  _CLAUDE_JSON="${HOME}/.claude.json"
+  _EMAIL=""
+  if [[ -f "$_CLAUDE_JSON" ]]; then
+    _EMAIL=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    acct = d.get('oauthAccount') or {}
+    print(acct.get('emailAddress', ''))
+except Exception:
+    pass
+" "$_CLAUDE_JSON" 2>/dev/null)
+  fi
+  if [[ -n "$_EMAIL" ]]; then
+    echo "Claude auth   → authenticated as ${_EMAIL}"
+  else
+    echo "warning: Claude Code is not authenticated — remote control will not work" >&2
+    echo "         Run:  claude login" >&2
+  fi
+fi
+
 if ! command -v python3 &>/dev/null; then
   echo "warning: python3 not found — Claude workspace trust registration will be skipped" >&2
 fi
@@ -201,32 +236,6 @@ else:
 PYEOF
 fi
 
-# ── systemd user unit ─────────────────────────────────────────────────────────
-
-if command -v systemctl &>/dev/null; then
-  UNIT_DIR="${HOME}/.config/systemd/user"
-  UNIT_FILE="$UNIT_DIR/couchdev.service"
-  mkdir -p "$UNIT_DIR"
-  sed "s|@PREFIX@|${PREFIX}|g" > "$UNIT_FILE" <<'UNIT'
-[Unit]
-Description=Couchdev hub
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=@PREFIX@/bin/couchdev serve --config @PREFIX@/etc/config.json
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-UNIT
-  echo "Installed unit   → $UNIT_FILE"
-  systemctl --user daemon-reload 2>/dev/null || true
-else
-  echo "systemctl not found — skipping service install"
-fi
-
 # ── post-install instructions ─────────────────────────────────────────────────
 
 cat <<EOF
@@ -249,10 +258,12 @@ fi
 cat <<EOF
 Next steps:
 
-1. Enable and start:
+1. Authenticate Claude Code (required for remote control):
 
-   systemctl --user enable --now couchdev
+   claude login
 
-   Or run directly:  couchdev serve --config ${CONFIG_FILE}
+2. Start couchdev:
+
+   couchdev serve --config ${CONFIG_FILE}
 
 EOF
