@@ -37,11 +37,17 @@ func main() {
 		Short: "Start the API server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			verbose, _ := cmd.Flags().GetBool("verbose")
-			var log *zap.Logger
+			var (
+				log *zap.Logger
+				err error
+			)
 			if verbose {
-				log, _ = zap.NewDevelopment()
+				log, err = zap.NewDevelopment()
 			} else {
-				log, _ = zap.NewProduction()
+				log, err = zap.NewProduction()
+			}
+			if err != nil {
+				return fmt.Errorf("init logger: %w", err)
 			}
 			defer log.Sync()
 
