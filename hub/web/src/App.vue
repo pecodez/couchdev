@@ -45,6 +45,18 @@
       </v-container>
     </v-main>
 
+    <v-footer app style="background:transparent;border-top:1px solid rgba(255,255,255,0.06);padding:16px 0 14px;">
+      <div style="width:100%;text-align:center;font-family:sans-serif;line-height:1.7;">
+        <div style="font-size:0.75rem;color:#888;">couchdev — remote control hub for Claude Code</div>
+        <div style="font-size:0.75rem;color:#888;">build from the comfort of your couch</div>
+        <div style="font-size:0.65rem;color:#666;">
+          brought to you by
+          <a href="https://github.com/pecodez" target="_blank" rel="noopener"
+             style="color:#666;text-decoration:underline;">pecodez</a>
+        </div>
+      </div>
+    </v-footer>
+
     <v-dialog v-model="tokenDialog" max-width="400">
       <v-card>
         <v-card-title class="pt-5">Update token</v-card-title>
