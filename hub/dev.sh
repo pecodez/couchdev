@@ -7,7 +7,7 @@
 #   .dev-run/data/couchdev.db    database
 #   .dev-run/data/projects/      projects dir (registered in Claude trust)
 #
-# Vite proxies /api → localhost:8443, so the frontend dev server and the
+# Vite proxies /api → localhost:8080, so the frontend dev server and the
 # backend can run side-by-side without CORS issues.
 
 set -euo pipefail
@@ -57,9 +57,10 @@ if [[ ! -f "$CONFIG" ]]; then
   TOKEN_HASH=$(echo "$TOKEN_OUTPUT" | awk 'NR==5{print $1}')
   cat > "$CONFIG" <<EOF
 {
-  "listen_addr": ":8443",
+  "listen_addr": ":8080",
   "db_path": "${DEV_DIR}/data/couchdev.db",
   "projects_dir": "${PROJECTS_DIR}",
+  "require_auth": true,
   "token_hash": "${TOKEN_HASH}"
 }
 EOF
@@ -120,7 +121,7 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-echo "→ starting backend on :8443..."
+echo "→ starting backend on :8080..."
 "$BIN" serve --config "$CONFIG" &
 BACKEND_PID=$!
 

@@ -23,8 +23,13 @@ func New(tokenHash []byte, db *sql.DB, t tmux.Client, webFS fs.FS, projectsDir s
 	project.NewHandler(ps, projectsDir, g).Register(apiMux)
 	session.NewHandler(svc, log).Register(apiMux)
 
+	apiHandler := http.Handler(http.StripPrefix("/api", apiMux))
+	if tokenHash != nil {
+		apiHandler = auth.Middleware(tokenHash)(apiHandler)
+	}
+
 	root := http.NewServeMux()
-	root.Handle("/api/", auth.Middleware(tokenHash)(http.StripPrefix("/api", apiMux)))
+	root.Handle("/api/", apiHandler)
 	root.Handle("/", http.FileServer(http.FS(webFS)))
 	return root
 }

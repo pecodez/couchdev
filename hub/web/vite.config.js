@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   build: { outDir: 'dist' },
-  server: { proxy: { '/api': 'http://localhost:8443' } },
+  server: { proxy: { '/api': 'http://localhost:8080' } },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.js'],
