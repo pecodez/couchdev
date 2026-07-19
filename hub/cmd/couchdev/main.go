@@ -55,9 +55,14 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("load config: %w", err)
 			}
-			tokenHash, err := auth.ParseTokenHash(cfg.TokenHash)
-			if err != nil {
-				return err
+			var tokenHash []byte
+			if cfg.RequireAuth {
+				tokenHash, err = auth.ParseTokenHash(cfg.TokenHash)
+				if err != nil {
+					return err
+				}
+			} else {
+				log.Warn("require_auth is disabled — /api/ routes are unauthenticated")
 			}
 			conn, err := db.Open(cfg.DBPath)
 			if err != nil {

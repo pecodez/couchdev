@@ -204,9 +204,10 @@ else
   TOKEN_HASH=$(echo "$TOKEN_OUTPUT" | awk 'NR==5{print $1}')
   cat > "$CONFIG_FILE" <<EOF
 {
-  "listen_addr": ":8443",
+  "listen_addr": ":8080",
   "db_path": "${DATA_DIR}/couchdev.db",
   "projects_dir": "${PROJECTS_DIR}",
+  "require_auth": true,
   "token_hash": "${TOKEN_HASH}"
 }
 EOF

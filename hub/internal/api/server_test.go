@@ -12,6 +12,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"go.uber.org/zap"
+
 	"github.com/pecodez/couchdev/internal/api"
 	"github.com/pecodez/couchdev/internal/db"
 	"github.com/pecodez/couchdev/internal/git"
@@ -40,6 +42,22 @@ func newTestServer(t *testing.T) (baseURL string) {
 		fstest.MapFS{},
 		t.TempDir(),
 		&git.Mock{},
+		zap.NewNop(),
+	))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func newTestServerNoAuth(t *testing.T) (baseURL string) {
+	t.Helper()
+	srv := httptest.NewServer(api.New(
+		nil,
+		openTestDB(t),
+		tmux.NewMock(),
+		fstest.MapFS{},
+		t.TempDir(),
+		&git.Mock{},
+		zap.NewNop(),
 	))
 	t.Cleanup(srv.Close)
 	return srv.URL
@@ -109,6 +127,19 @@ func TestAuth_WrongToken(t *testing.T) {
 func TestAuth_ValidToken(t *testing.T) {
 	base := newTestServer(t)
 	resp := authedGet(t, base+"/api/projects", testToken)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuth_Disabled(t *testing.T) {
+	base := newTestServerNoAuth(t)
+	req, _ := http.NewRequest(http.MethodGet, base+"/api/projects", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
