@@ -1,4 +1,5 @@
 bin/
 .dev-run/
 web/node_modules/
+web/dist/
 *.db
