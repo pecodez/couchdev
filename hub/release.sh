@@ -39,6 +39,13 @@ NEW="v${MAJOR}.${MINOR}.${PATCH}"
 echo "Current: ${CURRENT}"
 echo "New:     ${NEW}"
 echo ""
+
+if [[ ! -t 0 ]]; then
+  echo "error: confirmation requires an interactive terminal (stdin is not a TTY)" >&2
+  echo "       refusing to guess — run this from an interactive shell" >&2
+  exit 1
+fi
+
 read -rp "Tag and publish ${NEW}? [y/N] " confirm
 [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 
