@@ -17,7 +17,15 @@ async function request(method, path, body) {
     if (_onUnauthorized) _onUnauthorized()
     throw new Error('unauthorized')
   }
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok) {
+    const text = await res.text()
+    let body = text
+    try { body = JSON.parse(text) } catch { /* not JSON */ }
+    const err = new Error(typeof body === 'string' ? body : (body.reason || res.statusText))
+    err.status = res.status
+    err.body = body
+    throw err
+  }
   if (res.status === 204) return null
   return res.json()
 }
@@ -32,7 +40,8 @@ export const api = {
   createSession: (project, session, cwd) =>
     request('POST', `/projects/${project}/sessions`, { session, cwd: cwd || undefined }),
   getSession: (project, session) => request('GET', `/sessions/${project}/${session}`),
-  deleteSession: (project, session) => request('DELETE', `/sessions/${project}/${session}`),
+  deleteSession: (project, session, force) =>
+    request('DELETE', `/sessions/${project}/${session}${force ? '?force=true' : ''}`),
   getChanges: (project, session) => request('GET', `/sessions/${project}/${session}/changes`),
   resumeSession: (project, session) => request('POST', `/sessions/${project}/${session}/resume`, {}),
 }

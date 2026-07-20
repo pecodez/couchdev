@@ -11,6 +11,10 @@ type Mock struct {
 	AheadErr        error
 	Files           []string
 	FilesErr        error
+	CleanResult     bool
+	CleanErr        error
+	MergedResult    bool
+	MergedErr       error
 
 	WorktreeAdded   string // last worktreePath passed to WorktreeAdd
 	WorktreeRemoved string // last worktreePath passed to WorktreeRemove
@@ -46,4 +50,12 @@ func (m *Mock) CommitsAhead(_, _ string) (int, error) {
 
 func (m *Mock) ChangedFiles(_ string) ([]string, error) {
 	return m.Files, m.FilesErr
+}
+
+func (m *Mock) IsClean(_ string) (bool, error) {
+	return m.CleanResult, m.CleanErr
+}
+
+func (m *Mock) IsFullyMerged(_, _, _ string) (bool, error) {
+	return m.MergedResult, m.MergedErr
 }

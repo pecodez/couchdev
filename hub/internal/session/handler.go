@@ -118,13 +118,23 @@ func (h *Handler) changes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) teardown(w http.ResponseWriter, r *http.Request) {
-	h.log.Info("DELETE session", zap.String("project", r.PathValue("project")), zap.String("session", r.PathValue("session")))
-	if err := h.svc.Teardown(r.PathValue("project"), r.PathValue("session")); err != nil {
+	force := r.URL.Query().Get("force") == "true"
+	h.log.Info("DELETE session", zap.String("project", r.PathValue("project")), zap.String("session", r.PathValue("session")), zap.Bool("force", force))
+	deleted, reason, err := h.svc.Teardown(r.PathValue("project"), r.PathValue("session"), force)
+	if err != nil {
 		code := http.StatusInternalServerError
 		if strings.Contains(err.Error(), "not found") {
 			code = http.StatusNotFound
 		}
 		http.Error(w, err.Error(), code)
+		return
+	}
+	if !deleted {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(struct {
+			Reason string `json:"reason"`
+		}{reason})
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
