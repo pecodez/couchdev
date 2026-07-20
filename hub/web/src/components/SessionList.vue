@@ -2,6 +2,11 @@
   <div>
     <v-row align="center" class="mb-1">
       <v-col><span class="text-body-2 text-medium-emphasis">Sessions</span></v-col>
+      <v-col cols="auto" style="min-width: 150px">
+        <v-select v-model="filter" :items="filterOptions" item-title="label" item-value="value"
+                  density="compact" variant="outlined" hide-details clearable
+                  placeholder="Live + Resumable" />
+      </v-col>
       <v-col cols="auto">
         <v-btn icon="mdi-plus" size="x-small" variant="text" @click="dialog = true" />
         <v-btn icon="mdi-refresh" size="x-small" variant="text" @click="load" />
@@ -24,10 +29,10 @@
               <v-btn icon="mdi-play-circle-outline" size="x-small" variant="text"
                      title="Resume" @click.stop="resume(s)" />
               <v-btn icon="mdi-delete-outline" size="x-small" variant="text"
-                     title="Delete" @click.stop="teardown(s)" />
+                     title="Delete" @click.stop="requestDelete(s)" />
             </template>
             <v-btn v-else icon="mdi-stop-circle-outline" size="x-small" variant="text"
-                   :disabled="s.state === 'starting'" @click.stop="teardown(s)" />
+                   :disabled="s.state === 'starting'" @click.stop="requestDelete(s)" />
           </template>
         </v-expansion-panel-title>
         <v-expansion-panel-text>
@@ -56,6 +61,33 @@
     </v-expansion-panels>
     <div v-if="sessions.length === 0" class="text-caption text-medium-emphasis px-2">No sessions</div>
     <NewSessionDialog v-model="dialog" :project="project" @created="load" />
+
+    <v-dialog :model-value="!!confirmTarget" max-width="420"
+              @update:model-value="!$event && closeConfirm()">
+      <v-card v-if="confirmTarget">
+        <v-card-title>Delete {{ confirmTarget.session }}?</v-card-title>
+        <v-card-text>
+          <template v-if="blockedReason">
+            <v-alert type="warning" density="compact" class="mb-2">{{ blockedReason }}</v-alert>
+            <div class="text-caption text-medium-emphasis">
+              The worktree has been preserved so you can merge it later. Force delete will
+              stop the session and discard this work permanently.
+            </div>
+          </template>
+          <template v-else>
+            This will stop the session and remove its worktree.
+          </template>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="closeConfirm">Cancel</v-btn>
+          <v-btn v-if="blockedReason" color="error" :loading="deleting"
+                 @click="teardown(confirmTarget, true)">Force delete anyway</v-btn>
+          <v-btn v-else color="error" :loading="deleting"
+                 @click="teardown(confirmTarget, false)">Delete</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -68,19 +100,55 @@ const props = defineProps(['project'])
 const sessions = ref([])
 const dialog = ref(false)
 const changes = ref({})
+const filter = ref(null) // null (live+resumable, today's default) | 'live' | 'resumable' | 'all'
+const confirmTarget = ref(null)
+const blockedReason = ref('')
+const deleting = ref(false)
+
+const filterOptions = [
+  { label: 'Live', value: 'live' },
+  { label: 'Resumable', value: 'resumable' },
+  { label: 'All', value: 'all' },
+]
 
 const stateColor = s => ({ live: 'success', starting: 'warning', resumable: 'info', dead: 'default' }[s])
 
 async function load() {
   const all = await api.listSessions()
-  sessions.value = all.filter(s =>
-    s.canonical_name.startsWith(props.project + '/') && s.state !== 'dead'
-  )
+  sessions.value = all.filter(s => {
+    if (!s.canonical_name.startsWith(props.project + '/')) return false
+    if (filter.value === 'live') return s.state === 'live' || s.state === 'starting'
+    if (filter.value === 'resumable') return s.state === 'resumable'
+    if (filter.value === 'all') return true
+    return s.state !== 'dead'
+  })
 }
 
-async function teardown(s) {
-  await api.deleteSession(props.project, s.session)
-  await load()
+function requestDelete(s) {
+  confirmTarget.value = s
+  blockedReason.value = ''
+}
+
+function closeConfirm() {
+  confirmTarget.value = null
+  blockedReason.value = ''
+}
+
+async function teardown(s, force = false) {
+  deleting.value = true
+  try {
+    await api.deleteSession(props.project, s.session, force)
+    closeConfirm()
+    await load()
+  } catch (e) {
+    if (e.status === 409) {
+      blockedReason.value = e.body?.reason || e.message
+    } else {
+      throw e
+    }
+  } finally {
+    deleting.value = false
+  }
 }
 
 async function resume(s) {
@@ -101,5 +169,6 @@ async function onExpand(s, { value }) {
 }
 
 watch(() => props.project, () => { changes.value = {}; load() })
+watch(filter, load)
 onMounted(load)
 </script>

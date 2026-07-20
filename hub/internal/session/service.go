@@ -256,24 +256,55 @@ func (svc *Service) List() ([]Session, error) {
 	return all, nil
 }
 
-func (svc *Service) Teardown(projectName, sessionName string) error {
+// Teardown stops the session's tmux session (if live) and, when the worktree can be proven
+// safe to discard (clean working tree and branch fully merged into the project's default
+// branch), removes the worktree and marks the session dead. When force is true, or the
+// session has no worktree, the safety check is skipped. Otherwise the worktree and session
+// record are left untouched (deleted is false) so the caller can inform the user why, and the
+// session reappears as resumable since tmux was stopped but Killed stays false.
+func (svc *Service) Teardown(projectName, sessionName string, force bool) (deleted bool, reason string, err error) {
 	canonical := projectName + "/" + sessionName
 	sess, err := svc.sessions.GetByCanonical(canonical)
 	if err != nil {
-		return err
+		return false, "", err
 	}
+
 	if svc.tmux.HasSession(sess.TmuxName) {
 		if err := svc.tmux.KillSession(sess.TmuxName); err != nil {
-			return fmt.Errorf("kill tmux: %w", err)
+			return false, "", fmt.Errorf("kill tmux: %w", err)
 		}
 	}
-	if sess.WorktreePath != "" {
-		proj, err := svc.projects.GetByID(sess.ProjectID)
-		if err == nil {
-			_ = svc.git.WorktreeRemove(proj.RepoPath, sess.WorktreePath) // best-effort
+
+	if sess.WorktreePath == "" {
+		return true, "", svc.sessions.MarkKilled(canonical)
+	}
+
+	proj, err := svc.projects.GetByID(sess.ProjectID)
+	if err != nil {
+		return false, "", err
+	}
+
+	if !force {
+		clean, err := svc.git.IsClean(sess.WorktreePath)
+		if err != nil {
+			return false, "", fmt.Errorf("check clean: %w", err)
+		}
+		if !clean {
+			return false, "worktree has uncommitted or untracked changes", nil
+		}
+		merged, err := svc.git.IsFullyMerged(proj.RepoPath, proj.DefaultBranch, sess.Branch)
+		if err != nil {
+			return false, "", fmt.Errorf("check merged: %w", err)
+		}
+		if !merged {
+			return false, fmt.Sprintf("branch %q is not merged into %q", sess.Branch, proj.DefaultBranch), nil
 		}
 	}
-	return svc.sessions.MarkKilled(canonical)
+
+	if err := svc.git.WorktreeRemove(proj.RepoPath, sess.WorktreePath); err != nil {
+		return false, "", fmt.Errorf("remove worktree: %w", err)
+	}
+	return true, "", svc.sessions.MarkKilled(canonical)
 }
 
 func (svc *Service) Changes(projectName, sessionName string) (int, []string, error) {

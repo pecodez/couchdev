@@ -11,6 +11,7 @@ import (
 	"github.com/pecodez/couchdev/internal/project"
 	"github.com/pecodez/couchdev/internal/session"
 	"github.com/pecodez/couchdev/internal/tmux"
+	"go.uber.org/zap"
 )
 
 func openTestDB(t *testing.T) *sql.DB {
@@ -27,7 +28,7 @@ func TestGenesis_SessionDiesImmediately(t *testing.T) {
 	conn := openTestDB(t)
 	ps := project.NewStore(conn)
 	ss := session.NewStore(conn)
-	svc := session.NewService(ps, ss, tmux.NewMockDying(), &git.Mock{})
+	svc := session.NewService(ps, ss, tmux.NewMockDying(), &git.Mock{}, zap.NewNop())
 
 	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj"}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -48,7 +49,7 @@ func TestGenesis_PersistsWhenSessionStaysAlive(t *testing.T) {
 	conn := openTestDB(t)
 	ps := project.NewStore(conn)
 	ss := session.NewStore(conn)
-	svc := session.NewService(ps, ss, tmux.NewMock(), &git.Mock{})
+	svc := session.NewService(ps, ss, tmux.NewMock(), &git.Mock{}, zap.NewNop())
 
 	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj"}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -73,7 +74,7 @@ func TestGenesis_ShellCmdContainsClaude(t *testing.T) {
 	ps := project.NewStore(conn)
 	ss := session.NewStore(conn)
 	mock := tmux.NewMock()
-	svc := session.NewService(ps, ss, mock, &git.Mock{})
+	svc := session.NewService(ps, ss, mock, &git.Mock{}, zap.NewNop())
 
 	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj"}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -99,7 +100,7 @@ func TestGenesis_CreatesWorktreeAndStoresFields(t *testing.T) {
 	ps := project.NewStore(conn)
 	ss := session.NewStore(conn)
 	gm := &git.Mock{}
-	svc := session.NewService(ps, ss, tmux.NewMock(), gm)
+	svc := session.NewService(ps, ss, tmux.NewMock(), gm, zap.NewNop())
 
 	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj/source"}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -129,7 +130,7 @@ func TestGenesis_WorktreeFailureRollsBack(t *testing.T) {
 	ps := project.NewStore(conn)
 	ss := session.NewStore(conn)
 	gm := &git.Mock{WorktreeAddErr: fmt.Errorf("branch already exists")}
-	svc := session.NewService(ps, ss, tmux.NewMock(), gm)
+	svc := session.NewService(ps, ss, tmux.NewMock(), gm, zap.NewNop())
 
 	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj/source"}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -149,7 +150,7 @@ func TestChanges_ReturnsBranchAheadAndFiles(t *testing.T) {
 	ps := project.NewStore(conn)
 	ss := session.NewStore(conn)
 	gm := &git.Mock{AheadCount: 2, Files: []string{"a.go", "b.go"}}
-	svc := session.NewService(ps, ss, tmux.NewMock(), gm)
+	svc := session.NewService(ps, ss, tmux.NewMock(), gm, zap.NewNop())
 
 	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj/source", DefaultBranch: "main"}); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -167,5 +168,131 @@ func TestChanges_ReturnsBranchAheadAndFiles(t *testing.T) {
 	}
 	if len(files) != 2 {
 		t.Errorf("files = %v, want [a.go b.go]", files)
+	}
+}
+
+func TestTeardown_MergedAndClean_RemovesWorktree(t *testing.T) {
+	conn := openTestDB(t)
+	ps := project.NewStore(conn)
+	ss := session.NewStore(conn)
+	gm := &git.Mock{CleanResult: true, MergedResult: true}
+	svc := session.NewService(ps, ss, tmux.NewMock(), gm, zap.NewNop())
+
+	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj/source"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, err := svc.Genesis("proj", "s1", ""); err != nil {
+		t.Fatalf("genesis: %v", err)
+	}
+
+	deleted, reason, err := svc.Teardown("proj", "s1", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Fatalf("expected deleted = true, reason = %q", reason)
+	}
+	if gm.WorktreeRemoved == "" {
+		t.Error("expected worktree to be removed")
+	}
+
+	sess, err := svc.Status("proj", "s1")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if sess.State != session.StateDead {
+		t.Errorf("state = %q, want dead", sess.State)
+	}
+}
+
+func TestTeardown_NotMerged_PreservesWorktree(t *testing.T) {
+	conn := openTestDB(t)
+	ps := project.NewStore(conn)
+	ss := session.NewStore(conn)
+	gm := &git.Mock{CleanResult: true, MergedResult: false}
+	svc := session.NewService(ps, ss, tmux.NewMock(), gm, zap.NewNop())
+
+	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj/source"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, err := svc.Genesis("proj", "s1", ""); err != nil {
+		t.Fatalf("genesis: %v", err)
+	}
+
+	deleted, reason, err := svc.Teardown("proj", "s1", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deleted {
+		t.Fatal("expected deleted = false when branch is not merged")
+	}
+	if reason == "" {
+		t.Error("expected a non-empty reason")
+	}
+	if gm.WorktreeRemoved != "" {
+		t.Error("expected worktree to be preserved")
+	}
+
+	sess, err := svc.Status("proj", "s1")
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if sess.State != session.StateResumable {
+		t.Errorf("state = %q, want resumable", sess.State)
+	}
+}
+
+func TestTeardown_Dirty_PreservesWorktree(t *testing.T) {
+	conn := openTestDB(t)
+	ps := project.NewStore(conn)
+	ss := session.NewStore(conn)
+	gm := &git.Mock{CleanResult: false, MergedResult: true}
+	svc := session.NewService(ps, ss, tmux.NewMock(), gm, zap.NewNop())
+
+	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj/source"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, err := svc.Genesis("proj", "s1", ""); err != nil {
+		t.Fatalf("genesis: %v", err)
+	}
+
+	deleted, reason, err := svc.Teardown("proj", "s1", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deleted {
+		t.Fatal("expected deleted = false when worktree is dirty")
+	}
+	if reason == "" {
+		t.Error("expected a non-empty reason")
+	}
+	if gm.WorktreeRemoved != "" {
+		t.Error("expected worktree to be preserved")
+	}
+}
+
+func TestTeardown_Force_RemovesWorktreeEvenWhenNotMerged(t *testing.T) {
+	conn := openTestDB(t)
+	ps := project.NewStore(conn)
+	ss := session.NewStore(conn)
+	gm := &git.Mock{CleanResult: false, MergedResult: false}
+	svc := session.NewService(ps, ss, tmux.NewMock(), gm, zap.NewNop())
+
+	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj/source"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, err := svc.Genesis("proj", "s1", ""); err != nil {
+		t.Fatalf("genesis: %v", err)
+	}
+
+	deleted, _, err := svc.Teardown("proj", "s1", true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Fatal("expected deleted = true when force is set")
+	}
+	if gm.WorktreeRemoved == "" {
+		t.Error("expected worktree to be removed when forced")
 	}
 }

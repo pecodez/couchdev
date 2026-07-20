@@ -16,6 +16,8 @@ type Client interface {
 	WorktreeRemove(sourceDir, worktreePath string) error
 	CommitsAhead(worktreePath, base string) (int, error)
 	ChangedFiles(worktreePath string) ([]string, error)
+	IsClean(worktreePath string) (bool, error)
+	IsFullyMerged(repoPath, defaultBranch, branch string) (bool, error)
 }
 
 type Real struct{}
@@ -73,6 +75,56 @@ func (Real) CommitsAhead(worktreePath, base string) (int, error) {
 		return 0, fmt.Errorf("parse commit count: %w", err)
 	}
 	return n, nil
+}
+
+// IsClean reports whether the worktree has no staged, unstaged, or untracked changes.
+func (Real) IsClean(worktreePath string) (bool, error) {
+	out, err := exec.Command("git", "-C", worktreePath, "status", "--porcelain").Output()
+	if err != nil {
+		return false, fmt.Errorf("git status: %w", err)
+	}
+	return strings.TrimSpace(string(out)) == "", nil
+}
+
+// IsFullyMerged reports whether branch's changes are fully present in defaultBranch, such
+// that removing branch would not lose any work. It detects plain merge-commit/fast-forward
+// merges (via ancestry) and squash merges (via content comparison scoped to the files branch
+// touched). Anything it can't positively confirm is reported as not merged.
+func (Real) IsFullyMerged(repoPath, defaultBranch, branch string) (bool, error) {
+	err := exec.Command("git", "-C", repoPath, "merge-base", "--is-ancestor", branch, defaultBranch).Run()
+	if err == nil {
+		return true, nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+		return false, fmt.Errorf("git merge-base --is-ancestor: %w", err)
+	}
+
+	baseOut, err := exec.Command("git", "-C", repoPath, "merge-base", defaultBranch, branch).Output()
+	if err != nil {
+		return false, fmt.Errorf("git merge-base: %w", err)
+	}
+	mergeBase := strings.TrimSpace(string(baseOut))
+
+	filesOut, err := exec.Command("git", "-C", repoPath, "diff", "--name-only", mergeBase, branch).Output()
+	if err != nil {
+		return false, fmt.Errorf("git diff --name-only: %w", err)
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(filesOut)), "\n") {
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	if len(files) == 0 {
+		return true, nil
+	}
+
+	args := append([]string{"-C", repoPath, "diff", defaultBranch, branch, "--"}, files...)
+	diffOut, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return false, fmt.Errorf("git diff: %w", err)
+	}
+	return strings.TrimSpace(string(diffOut)) == "", nil
 }
 
 func (Real) ChangedFiles(worktreePath string) ([]string, error) {
