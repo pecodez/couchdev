@@ -91,10 +91,8 @@ const verifying = ref(false)
 onUnauthorized(() => { authed.value = false })
 
 onMounted(async () => {
-  if (localStorage.getItem('couchdev_token')) {
-    authed.value = await api.verify()
-    if (!authed.value) api.clearToken()
-  }
+  authed.value = await api.verify()
+  if (!authed.value) api.clearToken()
 })
 
 function openTokenDialog() {
