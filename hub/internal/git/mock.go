@@ -3,21 +3,25 @@ package git
 import "os"
 
 type Mock struct {
-	CloneErr        error
-	InitErr         error
-	WorktreeAddErr  error
+	CloneErr          error
+	InitErr           error
+	FetchErr          error
+	WorktreeAddErr    error
 	WorktreeRemoveErr error
-	AheadCount      int
-	AheadErr        error
-	Files           []string
-	FilesErr        error
-	CleanResult     bool
-	CleanErr        error
-	MergedResult    bool
-	MergedErr       error
+	AheadCount   int
+	AheadErr     error
+	Files        []string
+	FilesErr     error
+	CleanResult  bool
+	CleanErr     error
+	MergedResult bool
+	MergedErr    error
 
-	WorktreeAdded   string // last worktreePath passed to WorktreeAdd
-	WorktreeRemoved string // last worktreePath passed to WorktreeRemove
+	FetchedRemote         string // last remote passed to Fetch
+	FetchedBranch         string // last branch passed to Fetch
+	WorktreeAdded         string // last worktreePath passed to WorktreeAdd
+	WorktreeAddStartPoint string // last startPoint passed to WorktreeAdd
+	WorktreeRemoved       string // last worktreePath passed to WorktreeRemove
 }
 
 func (m *Mock) Clone(_, dest string) error {
@@ -30,12 +34,19 @@ func (m *Mock) Init(path string) error {
 	return m.InitErr
 }
 
-func (m *Mock) WorktreeAdd(_, worktreePath, _ string) error {
+func (m *Mock) Fetch(_, remote, branch string) error {
+	m.FetchedRemote = remote
+	m.FetchedBranch = branch
+	return m.FetchErr
+}
+
+func (m *Mock) WorktreeAdd(_, worktreePath, _, startPoint string) error {
 	if m.WorktreeAddErr != nil {
 		return m.WorktreeAddErr
 	}
 	os.MkdirAll(worktreePath, 0755)
 	m.WorktreeAdded = worktreePath
+	m.WorktreeAddStartPoint = startPoint
 	return nil
 }
 
