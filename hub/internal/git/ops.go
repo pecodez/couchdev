@@ -12,7 +12,8 @@ import (
 type Client interface {
 	Clone(repoURL, destPath string) error
 	Init(path string) error
-	WorktreeAdd(sourceDir, worktreePath, branch string) error
+	Fetch(sourceDir, remote, branch string) error
+	WorktreeAdd(sourceDir, worktreePath, branch, startPoint string) error
 	WorktreeRemove(sourceDir, worktreePath string) error
 	CommitsAhead(worktreePath, base string) (int, error)
 	ChangedFiles(worktreePath string) ([]string, error)
@@ -45,8 +46,21 @@ func (Real) Init(path string) error {
 	return nil
 }
 
-func (Real) WorktreeAdd(sourceDir, worktreePath, branch string) error {
-	cmd := exec.Command("git", "-C", sourceDir, "worktree", "add", worktreePath, "-b", branch)
+func (Real) Fetch(sourceDir, remote, branch string) error {
+	cmd := exec.Command("git", "-C", sourceDir, "fetch", remote, branch)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git fetch: %w: %s", err, stderr.String())
+	}
+	return nil
+}
+
+// WorktreeAdd creates a new worktree at worktreePath on a new branch cut from
+// startPoint (e.g. "origin/main"). Callers should Fetch startPoint's remote
+// ref first so the branch isn't cut from a stale local ref.
+func (Real) WorktreeAdd(sourceDir, worktreePath, branch, startPoint string) error {
+	cmd := exec.Command("git", "-C", sourceDir, "worktree", "add", worktreePath, "-b", branch, startPoint)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"go.uber.org/zap"
+
 	"github.com/pecodez/couchdev/internal/db"
 	"github.com/pecodez/couchdev/internal/git"
 	"github.com/pecodez/couchdev/internal/project"
 	"github.com/pecodez/couchdev/internal/session"
 	"github.com/pecodez/couchdev/internal/tmux"
-	"go.uber.org/zap"
 )
 
 func openTestDB(t *testing.T) *sql.DB {
@@ -90,8 +91,8 @@ func TestGenesis_ShellCmdContainsClaude(t *testing.T) {
 	if !strings.Contains(mock.LastCmd, "proj/s1") {
 		t.Errorf("shell cmd %q does not contain canonical name proj/s1", mock.LastCmd)
 	}
-	if !strings.Contains(mock.LastCmd, "--dangerously-skip-permissions") {
-		t.Errorf("shell cmd %q missing --dangerously-skip-permissions (required to bypass directory trust prompt)", mock.LastCmd)
+	if !strings.Contains(mock.LastCmd, "--rc") {
+		t.Errorf("shell cmd %q missing --rc flag", mock.LastCmd)
 	}
 }
 
@@ -122,6 +123,35 @@ func TestGenesis_CreatesWorktreeAndStoresFields(t *testing.T) {
 	}
 	if gm.WorktreeAdded != got.WorktreePath {
 		t.Errorf("worktree added at %q, want %q", gm.WorktreeAdded, got.WorktreePath)
+	}
+	if gm.FetchedRemote != "origin" || gm.FetchedBranch != "main" {
+		t.Errorf("fetched (%q, %q), want (origin, main)", gm.FetchedRemote, gm.FetchedBranch)
+	}
+	if gm.WorktreeAddStartPoint != "origin/main" {
+		t.Errorf("worktree add start point = %q, want origin/main", gm.WorktreeAddStartPoint)
+	}
+}
+
+func TestGenesis_FetchFailureAbortsBeforeWorktreeAdd(t *testing.T) {
+	conn := openTestDB(t)
+	ps := project.NewStore(conn)
+	ss := session.NewStore(conn)
+	gm := &git.Mock{FetchErr: fmt.Errorf("could not resolve host")}
+	svc := session.NewService(ps, ss, tmux.NewMock(), gm, zap.NewNop())
+
+	if _, err := ps.Create(project.Project{Name: "proj", RepoPath: "/tmp/proj/source"}); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	if _, err := svc.Genesis("proj", "s1", ""); err == nil {
+		t.Fatal("expected error when fetch fails, got nil")
+	}
+	if gm.WorktreeAdded != "" {
+		t.Errorf("expected WorktreeAdd not to be called after fetch failure, but worktree added at %q", gm.WorktreeAdded)
+	}
+	sessions, _ := ss.ListAll()
+	if len(sessions) != 0 {
+		t.Fatalf("expected 0 sessions in DB after failed fetch, got %d", len(sessions))
 	}
 }
 
