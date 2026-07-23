@@ -82,10 +82,18 @@ func (svc *Service) Genesis(projectName, sessionName, cwd string) (*Session, err
 
 	branch := sessionName
 	worktreePath := filepath.Join(filepath.Dir(proj.RepoPath), "worktrees", sessionName)
-	if err := svc.git.Fetch(proj.RepoPath, "origin", proj.DefaultBranch); err != nil {
-		return nil, fmt.Errorf("fetch default branch: %w", err)
+
+	startPoint := proj.DefaultBranch
+	hasOrigin, err := svc.git.HasRemote(proj.RepoPath, "origin")
+	if err != nil {
+		return nil, fmt.Errorf("check remote: %w", err)
 	}
-	startPoint := "origin/" + proj.DefaultBranch
+	if hasOrigin {
+		if err := svc.git.Fetch(proj.RepoPath, "origin", proj.DefaultBranch); err != nil {
+			return nil, fmt.Errorf("fetch default branch: %w", err)
+		}
+		startPoint = "origin/" + proj.DefaultBranch
+	}
 	if err := svc.git.WorktreeAdd(proj.RepoPath, worktreePath, branch, startPoint); err != nil {
 		return nil, fmt.Errorf("create worktree: %w", err)
 	}

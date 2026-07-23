@@ -6,6 +6,8 @@ type Mock struct {
 	CloneErr          error
 	InitErr           error
 	FetchErr          error
+	NoRemote          bool // when true, HasRemote reports no remote (simulates a local-only repo)
+	HasRemoteErr      error
 	WorktreeAddErr    error
 	WorktreeRemoveErr error
 	AheadCount   int
@@ -38,6 +40,10 @@ func (m *Mock) Fetch(_, remote, branch string) error {
 	m.FetchedRemote = remote
 	m.FetchedBranch = branch
 	return m.FetchErr
+}
+
+func (m *Mock) HasRemote(_, _ string) (bool, error) {
+	return !m.NoRemote, m.HasRemoteErr
 }
 
 func (m *Mock) WorktreeAdd(_, worktreePath, _, startPoint string) error {
