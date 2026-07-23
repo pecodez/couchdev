@@ -148,7 +148,12 @@ func (h *Handler) connectRemote(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	if p.RepoURL != "" {
+	hasOrigin, err := h.git.HasRemote(p.RepoPath, "origin")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if hasOrigin {
 		http.Error(w, "project already has a remote configured", http.StatusConflict)
 		return
 	}
