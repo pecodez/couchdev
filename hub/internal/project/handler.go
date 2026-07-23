@@ -41,6 +41,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /projects", h.create)
 	mux.HandleFunc("GET /projects", h.list)
 	mux.HandleFunc("DELETE /projects/{name}", h.delete)
+	mux.HandleFunc("POST /projects/{name}/remote", h.connectRemote)
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -121,6 +122,70 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		os.RemoveAll(projectDir)
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// connectRemote attaches an existing remote repo URL to a local-only project
+// and pushes its default branch. If the push fails after the remote was
+// successfully attached, the attachment is still persisted and a warning is
+// returned rather than the failure being treated as a full rollback.
+func (h *Handler) connectRemote(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+
+	var body struct {
+		RepoURL string `json:"repo_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if body.RepoURL == "" {
+		http.Error(w, "repo_url required", http.StatusBadRequest)
+		return
+	}
+
+	p, err := h.store.GetByName(name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	hasOrigin, err := h.git.HasRemote(p.RepoPath, "origin")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if hasOrigin {
+		http.Error(w, "project already has a remote configured", http.StatusConflict)
+		return
+	}
+
+	if err := h.git.AddRemote(p.RepoPath, "origin", body.RepoURL); err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+
+	registry := detectRegistry(body.RepoURL)
+
+	var warning string
+	if err := h.git.Push(p.RepoPath, "origin", p.DefaultBranch); err != nil {
+		warning = "remote attached but push failed: " + err.Error()
+	}
+
+	if err := h.store.SetRemote(name, body.RepoURL, registry); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	p.RepoURL = body.RepoURL
+	p.Registry = registry
+	h.enrich(p)
+
+	resp := struct {
+		*Project
+		Warning string `json:"warning,omitempty"`
+	}{Project: p, Warning: warning}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 // enrich sets computed fields on p (source_missing, plans_dir, description, languages).

@@ -36,6 +36,8 @@ export const api = {
   verify: () => request('GET', '/projects').then(() => true).catch(() => false),
   listProjects: () => request('GET', '/projects'),
   createProject: (payload) => request('POST', '/projects', payload),
+  connectRemote: (project, repoUrl) =>
+    request('POST', `/projects/${project}/remote`, { repo_url: repoUrl }),
   listSessions: () => request('GET', '/sessions'),
   createSession: (project, session, cwd) =>
     request('POST', `/projects/${project}/sessions`, { session, cwd: cwd || undefined }),

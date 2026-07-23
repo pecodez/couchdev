@@ -86,3 +86,8 @@ func (s *Store) UpdatePath(name, newRepoPath string) error {
 	_, err := s.db.Exec(`UPDATE projects SET repo_path = ? WHERE name = ?`, newRepoPath, name)
 	return err
 }
+
+func (s *Store) SetRemote(name, repoURL, registry string) error {
+	_, err := s.db.Exec(`UPDATE projects SET repo_url = ?, registry = ? WHERE name = ?`, repoURL, registry, name)
+	return err
+}

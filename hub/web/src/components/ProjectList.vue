@@ -12,6 +12,7 @@
     </v-row>
 
     <v-alert v-if="error" type="error" density="compact" class="mb-4">{{ error }}</v-alert>
+    <v-alert v-if="warning" type="warning" density="compact" class="mb-4" closable @click:close="warning = ''">{{ warning }}</v-alert>
 
     <div v-if="projects.length">
       <v-card v-for="p in projects" :key="p.id" class="project-card mb-3" :style="cardStyle(p)">
@@ -26,6 +27,12 @@
                     style="opacity:.75;flex-shrink:0;cursor:pointer;">
               {{ p.registry }}
             </v-chip>
+            <v-btn v-if="!p.repo_url"
+                   size="x-small" variant="outlined" prepend-icon="mdi-source-branch-sync"
+                   style="opacity:.75;flex-shrink:0;"
+                   @click="openConnectDialog(p)">
+              Connect remote
+            </v-btn>
             <v-icon v-if="p.source_missing" size="16" color="warning" title="Source directory missing">
               mdi-alert-outline
             </v-icon>
@@ -76,6 +83,7 @@
     </div>
 
     <NewProjectDialog v-model="dialog" @created="load" />
+    <ConnectRemoteDialog v-model="connectDialog" :project="connectTarget" @connected="onConnected" />
   </div>
 </template>
 
@@ -84,16 +92,30 @@ import { ref, onMounted } from 'vue'
 import { api } from '../api.js'
 import SessionList from './SessionList.vue'
 import NewProjectDialog from './NewProjectDialog.vue'
+import ConnectRemoteDialog from './ConnectRemoteDialog.vue'
 
 const projects = ref([])
 const error = ref('')
+const warning = ref('')
 const dialog = ref(false)
+const connectDialog = ref(false)
+const connectTarget = ref(null)
 
 async function load() {
   try { projects.value = await api.listProjects() }
   catch (e) { error.value = e.message }
 }
 onMounted(load)
+
+function openConnectDialog(p) {
+  connectTarget.value = p
+  connectDialog.value = true
+}
+
+function onConnected(w) {
+  warning.value = w
+  load()
+}
 
 const LANG_COLORS = {
   'Go':              '#00ADD8',

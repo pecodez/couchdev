@@ -14,6 +14,8 @@ type Client interface {
 	Init(path string) error
 	Fetch(sourceDir, remote, branch string) error
 	HasRemote(sourceDir, remote string) (bool, error)
+	AddRemote(sourceDir, remote, url string) error
+	Push(sourceDir, remote, branch string) error
 	WorktreeAdd(sourceDir, worktreePath, branch, startPoint string) error
 	WorktreeRemove(sourceDir, worktreePath string) error
 	CommitsAhead(worktreePath, base string) (int, error)
@@ -71,6 +73,28 @@ func (Real) HasRemote(sourceDir, remote string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// AddRemote configures a new remote named remote pointing at url in sourceDir.
+func (Real) AddRemote(sourceDir, remote, url string) error {
+	cmd := exec.Command("git", "-C", sourceDir, "remote", "add", remote, url)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git remote add: %w: %s", err, stderr.String())
+	}
+	return nil
+}
+
+// Push pushes branch to remote, setting it as the upstream tracking branch.
+func (Real) Push(sourceDir, remote, branch string) error {
+	cmd := exec.Command("git", "-C", sourceDir, "push", "-u", remote, branch)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git push: %w: %s", err, stderr.String())
+	}
+	return nil
 }
 
 // WorktreeAdd creates a new worktree at worktreePath on a new branch cut from
