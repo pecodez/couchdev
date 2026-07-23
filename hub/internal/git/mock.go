@@ -8,6 +8,8 @@ type Mock struct {
 	FetchErr          error
 	NoRemote          bool // when true, HasRemote reports no remote (simulates a local-only repo)
 	HasRemoteErr      error
+	AddRemoteErr      error
+	PushErr           error
 	WorktreeAddErr    error
 	WorktreeRemoveErr error
 	AheadCount   int
@@ -21,6 +23,10 @@ type Mock struct {
 
 	FetchedRemote         string // last remote passed to Fetch
 	FetchedBranch         string // last branch passed to Fetch
+	AddedRemote           string // last remote name passed to AddRemote
+	AddedRemoteURL        string // last url passed to AddRemote
+	PushedRemote          string // last remote passed to Push
+	PushedBranch          string // last branch passed to Push
 	WorktreeAdded         string // last worktreePath passed to WorktreeAdd
 	WorktreeAddStartPoint string // last startPoint passed to WorktreeAdd
 	WorktreeRemoved       string // last worktreePath passed to WorktreeRemove
@@ -44,6 +50,18 @@ func (m *Mock) Fetch(_, remote, branch string) error {
 
 func (m *Mock) HasRemote(_, _ string) (bool, error) {
 	return !m.NoRemote, m.HasRemoteErr
+}
+
+func (m *Mock) AddRemote(_, remote, url string) error {
+	m.AddedRemote = remote
+	m.AddedRemoteURL = url
+	return m.AddRemoteErr
+}
+
+func (m *Mock) Push(_, remote, branch string) error {
+	m.PushedRemote = remote
+	m.PushedBranch = branch
+	return m.PushErr
 }
 
 func (m *Mock) WorktreeAdd(_, worktreePath, _, startPoint string) error {
