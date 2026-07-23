@@ -13,6 +13,7 @@ type Client interface {
 	Clone(repoURL, destPath string) error
 	Init(path string) error
 	Fetch(sourceDir, remote, branch string) error
+	HasRemote(sourceDir, remote string) (bool, error)
 	WorktreeAdd(sourceDir, worktreePath, branch, startPoint string) error
 	WorktreeRemove(sourceDir, worktreePath string) error
 	CommitsAhead(worktreePath, base string) (int, error)
@@ -54,6 +55,22 @@ func (Real) Fetch(sourceDir, remote, branch string) error {
 		return fmt.Errorf("git fetch: %w: %s", err, stderr.String())
 	}
 	return nil
+}
+
+// HasRemote reports whether sourceDir has a remote named remote configured.
+// Local-only repos (e.g. freshly `git init`'d greenfield projects) have no
+// remotes at all, so callers should skip Fetch when this returns false.
+func (Real) HasRemote(sourceDir, remote string) (bool, error) {
+	out, err := exec.Command("git", "-C", sourceDir, "remote").Output()
+	if err != nil {
+		return false, fmt.Errorf("git remote: %w", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) == remote {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // WorktreeAdd creates a new worktree at worktreePath on a new branch cut from
