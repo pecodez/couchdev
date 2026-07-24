@@ -26,6 +26,11 @@ import (
 )
 
 var version = "dev"
+var commit = "unknown"
+
+func displayVersion() string {
+	return fmt.Sprintf("%s (%s)", version, commit)
+}
 
 func main() {
 	root := &cobra.Command{Use: "couchdev", Short: "Claude Code RC session launcher"}
@@ -75,7 +80,7 @@ func main() {
 			runDiscovery(cfg.ProjectsDir, ps, log)
 			session.SyncAllProjects(ps, git.Real{}, log)
 
-			handler := api.New(tokenHash, conn, tmux.NewExec(log), couchdev.WebFS, cfg.ProjectsDir, git.Real{}, log)
+			handler := api.New(tokenHash, conn, tmux.NewExec(log), couchdev.WebFS, cfg.ProjectsDir, git.Real{}, log, displayVersion())
 			log.Info("starting", zap.String("addr", cfg.ListenAddr))
 			if cfg.TLSCert != "" && cfg.TLSKey != "" {
 				return http.ListenAndServeTLS(cfg.ListenAddr, cfg.TLSCert, cfg.TLSKey, handler)
@@ -105,7 +110,7 @@ func main() {
 	versionCmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print version",
-		Run:   func(cmd *cobra.Command, args []string) { fmt.Println(version) },
+		Run:   func(cmd *cobra.Command, args []string) { fmt.Println(displayVersion()) },
 	}
 
 	tokenCmd.AddCommand(tokenGenCmd)

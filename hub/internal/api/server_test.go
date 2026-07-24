@@ -43,6 +43,7 @@ func newTestServer(t *testing.T) (baseURL string) {
 		t.TempDir(),
 		&git.Mock{},
 		zap.NewNop(),
+		"test",
 	))
 	t.Cleanup(srv.Close)
 	return srv.URL
@@ -58,6 +59,7 @@ func newTestServerNoAuth(t *testing.T) (baseURL string) {
 		t.TempDir(),
 		&git.Mock{},
 		zap.NewNop(),
+		"test",
 	))
 	t.Cleanup(srv.Close)
 	return srv.URL

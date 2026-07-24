@@ -3,7 +3,8 @@ export PATH := $(PATH):/usr/local/go/bin:$(HOME)/go-sdk/go/bin
 .PHONY: build build-go build-web build-release dev install release-patch release-minor release-major clean
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-GO_LDFLAGS := -X main.version=$(VERSION)
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+GO_LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
 build: build-web build-go
 

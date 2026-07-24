@@ -47,10 +47,10 @@
 
     <v-footer app style="background:transparent;border-top:1px solid rgba(255,255,255,0.06);padding:16px 0 14px;">
       <div style="width:100%;text-align:center;font-family:sans-serif;line-height:1.7;">
-        <div style="font-size:0.75rem;color:#888;">couchdev — remote control hub for Claude Code</div>
-        <div style="font-size:0.75rem;color:#888;">build from the comfort of your couch</div>
+        <div style="font-size:0.75rem;color:#888;"><strong>couchdev</strong> — remote control hub for Claude Code</div>
+        <div style="font-size:0.75rem;color:#888;font-style:italic;">build from the comfort of your couch</div>
         <div style="font-size:0.65rem;color:#666;">
-          brought to you by
+          {{ version ? version + ' - ' : '' }}brought to you by
           <a href="https://github.com/pecodez" target="_blank" rel="noopener"
              style="color:#666;text-decoration:underline;">pecodez</a>
         </div>
@@ -87,12 +87,20 @@ const tokenDialog = ref(false)
 const inputToken = ref('')
 const tokenError = ref('')
 const verifying = ref(false)
+const version = ref('')
 
 onUnauthorized(() => { authed.value = false })
 
 onMounted(async () => {
   authed.value = await api.verify()
   if (!authed.value) api.clearToken()
+
+  try {
+    const res = await fetch('/api/version')
+    version.value = (await res.json()).version
+  } catch {
+    // non-critical, leave footer without a version
+  }
 })
 
 function openTokenDialog() {
