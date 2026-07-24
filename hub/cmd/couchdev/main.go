@@ -21,6 +21,7 @@ import (
 	"github.com/pecodez/couchdev/internal/db"
 	"github.com/pecodez/couchdev/internal/git"
 	"github.com/pecodez/couchdev/internal/project"
+	"github.com/pecodez/couchdev/internal/session"
 	"github.com/pecodez/couchdev/internal/tmux"
 )
 
@@ -70,7 +71,9 @@ func main() {
 			}
 			defer conn.Close()
 
-			runDiscovery(cfg.ProjectsDir, project.NewStore(conn), log)
+			ps := project.NewStore(conn)
+			runDiscovery(cfg.ProjectsDir, ps, log)
+			session.SyncAllProjects(ps, git.Real{}, log)
 
 			handler := api.New(tokenHash, conn, tmux.NewExec(log), couchdev.WebFS, cfg.ProjectsDir, git.Real{}, log)
 			log.Info("starting", zap.String("addr", cfg.ListenAddr))

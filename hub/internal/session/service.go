@@ -56,6 +56,26 @@ func checkClaudeBridge() error {
 	return nil
 }
 
+// defaultBranchRef returns the ref that state checks (merge status, commits
+// ahead) should compare against. When the project has an "origin" remote, it
+// fetches the default branch and returns "origin/<default-branch>" so checks
+// reflect the real remote state rather than a local branch ref that may not
+// have been updated since a PR was merged elsewhere (e.g. on GitHub). If
+// there's no remote, or the fetch fails (e.g. offline), it falls back to the
+// local default-branch ref, matching prior behavior.
+func (svc *Service) defaultBranchRef(proj *project.Project) string {
+	hasRemote, err := svc.git.HasRemote(proj.RepoPath, "origin")
+	if err != nil || !hasRemote {
+		return proj.DefaultBranch
+	}
+	if err := svc.git.Fetch(proj.RepoPath, "origin", proj.DefaultBranch); err != nil {
+		svc.log.Warn("defaultBranchRef: fetch failed, falling back to local ref",
+			zap.String("project", proj.Name), zap.Error(err))
+		return proj.DefaultBranch
+	}
+	return "origin/" + proj.DefaultBranch
+}
+
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -304,7 +324,7 @@ func (svc *Service) Teardown(projectName, sessionName string, force bool) (delet
 		if !clean {
 			return false, "worktree has uncommitted or untracked changes", nil
 		}
-		merged, err := svc.git.IsFullyMerged(proj.RepoPath, proj.DefaultBranch, sess.Branch)
+		merged, err := svc.git.IsFullyMerged(proj.RepoPath, svc.defaultBranchRef(proj), sess.Branch)
 		if err != nil {
 			return false, "", fmt.Errorf("check merged: %w", err)
 		}
@@ -332,7 +352,7 @@ func (svc *Service) Changes(projectName, sessionName string) (int, []string, err
 	if err != nil {
 		return 0, nil, err
 	}
-	ahead, err := svc.git.CommitsAhead(sess.WorktreePath, proj.DefaultBranch)
+	ahead, err := svc.git.CommitsAhead(sess.WorktreePath, svc.defaultBranchRef(proj))
 	if err != nil {
 		return 0, nil, fmt.Errorf("commits ahead: %w", err)
 	}

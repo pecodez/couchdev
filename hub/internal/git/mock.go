@@ -23,6 +23,7 @@ type Mock struct {
 
 	FetchedRemote         string // last remote passed to Fetch
 	FetchedBranch         string // last branch passed to Fetch
+	FetchCalls            int    // number of times Fetch was called
 	AddedRemote           string // last remote name passed to AddRemote
 	AddedRemoteURL        string // last url passed to AddRemote
 	PushedRemote          string // last remote passed to Push
@@ -30,6 +31,8 @@ type Mock struct {
 	WorktreeAdded         string // last worktreePath passed to WorktreeAdd
 	WorktreeAddStartPoint string // last startPoint passed to WorktreeAdd
 	WorktreeRemoved       string // last worktreePath passed to WorktreeRemove
+	MergedDefaultBranch   string // last defaultBranch (ref) arg passed to IsFullyMerged
+	AheadBase             string // last base ref arg passed to CommitsAhead
 }
 
 func (m *Mock) Clone(_, dest string) error {
@@ -45,6 +48,7 @@ func (m *Mock) Init(path string) error {
 func (m *Mock) Fetch(_, remote, branch string) error {
 	m.FetchedRemote = remote
 	m.FetchedBranch = branch
+	m.FetchCalls++
 	return m.FetchErr
 }
 
@@ -79,7 +83,8 @@ func (m *Mock) WorktreeRemove(_, worktreePath string) error {
 	return m.WorktreeRemoveErr
 }
 
-func (m *Mock) CommitsAhead(_, _ string) (int, error) {
+func (m *Mock) CommitsAhead(_, base string) (int, error) {
+	m.AheadBase = base
 	return m.AheadCount, m.AheadErr
 }
 
@@ -91,6 +96,7 @@ func (m *Mock) IsClean(_ string) (bool, error) {
 	return m.CleanResult, m.CleanErr
 }
 
-func (m *Mock) IsFullyMerged(_, _, _ string) (bool, error) {
+func (m *Mock) IsFullyMerged(_, defaultBranch, _ string) (bool, error) {
+	m.MergedDefaultBranch = defaultBranch
 	return m.MergedResult, m.MergedErr
 }
