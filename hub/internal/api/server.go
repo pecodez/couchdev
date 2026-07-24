@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/pecodez/couchdev/internal/tmux"
 )
 
-func New(tokenHash []byte, db *sql.DB, t tmux.Client, webFS fs.FS, projectsDir string, g git.Client, log *zap.Logger) http.Handler {
+func New(tokenHash []byte, db *sql.DB, t tmux.Client, webFS fs.FS, projectsDir string, g git.Client, log *zap.Logger, version string) http.Handler {
 	ps := project.NewStore(db)
 	ss := session.NewStore(db)
 	svc := session.NewService(ps, ss, t, g, log)
@@ -29,6 +30,10 @@ func New(tokenHash []byte, db *sql.DB, t tmux.Client, webFS fs.FS, projectsDir s
 	}
 
 	root := http.NewServeMux()
+	root.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"version": version})
+	})
 	root.Handle("/api/", apiHandler)
 	root.Handle("/", http.FileServer(http.FS(webFS)))
 	return root
