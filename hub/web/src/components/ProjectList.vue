@@ -27,12 +27,12 @@
                     style="opacity:.75;flex-shrink:0;cursor:pointer;">
               {{ p.registry }}
             </v-chip>
-            <v-btn v-if="!p.repo_url"
-                   size="x-small" variant="outlined" prepend-icon="mdi-source-branch-sync"
-                   style="opacity:.75;flex-shrink:0;"
-                   @click="openConnectDialog(p)">
+            <v-chip v-if="!p.repo_url"
+                    size="x-small" variant="outlined" prepend-icon="mdi-source-branch-sync"
+                    style="opacity:.75;flex-shrink:0;cursor:pointer;"
+                    @click="openConnectDialog(p)">
               Connect remote
-            </v-btn>
+            </v-chip>
             <v-icon v-if="p.source_missing" size="16" color="warning" title="Source directory missing">
               mdi-alert-outline
             </v-icon>

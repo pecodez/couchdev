@@ -8,6 +8,8 @@ type Mock struct {
 	FetchErr          error
 	NoRemote          bool // when true, HasRemote reports no remote (simulates a local-only repo)
 	HasRemoteErr      error
+	RemoteURLResult   string
+	RemoteURLErr      error
 	AddRemoteErr      error
 	PushErr           error
 	WorktreeAddErr    error
@@ -54,6 +56,10 @@ func (m *Mock) Fetch(_, remote, branch string) error {
 
 func (m *Mock) HasRemote(_, _ string) (bool, error) {
 	return !m.NoRemote, m.HasRemoteErr
+}
+
+func (m *Mock) RemoteURL(_, _ string) (string, error) {
+	return m.RemoteURLResult, m.RemoteURLErr
 }
 
 func (m *Mock) AddRemote(_, remote, url string) error {

@@ -14,6 +14,7 @@ type Client interface {
 	Init(path string) error
 	Fetch(sourceDir, remote, branch string) error
 	HasRemote(sourceDir, remote string) (bool, error)
+	RemoteURL(sourceDir, remote string) (string, error)
 	AddRemote(sourceDir, remote, url string) error
 	Push(sourceDir, remote, branch string) error
 	WorktreeAdd(sourceDir, worktreePath, branch, startPoint string) error
@@ -73,6 +74,15 @@ func (Real) HasRemote(sourceDir, remote string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// RemoteURL returns the URL configured for remote in sourceDir.
+func (Real) RemoteURL(sourceDir, remote string) (string, error) {
+	out, err := exec.Command("git", "-C", sourceDir, "remote", "get-url", remote).Output()
+	if err != nil {
+		return "", fmt.Errorf("git remote get-url: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // AddRemote configures a new remote named remote pointing at url in sourceDir.
