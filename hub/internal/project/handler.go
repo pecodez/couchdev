@@ -148,13 +148,39 @@ func (h *Handler) connectRemote(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	if p.RepoURL != "" {
+		http.Error(w, "project already has a remote configured", http.StatusConflict)
+		return
+	}
+
 	hasOrigin, err := h.git.HasRemote(p.RepoPath, "origin")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if hasOrigin {
-		http.Error(w, "project already has a remote configured", http.StatusConflict)
+		// The remote is already configured on disk (e.g. attached outside the
+		// UI) but was never recorded in the DB. Sync the DB to the real state
+		// instead of erroring, since there's nothing to add.
+		actualURL, err := h.git.RemoteURL(p.RepoPath, "origin")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		registry := detectRegistry(actualURL)
+		if err := h.store.SetRemote(name, actualURL, registry); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		p.RepoURL = actualURL
+		p.Registry = registry
+		h.enrich(p)
+		resp := struct {
+			*Project
+			Warning string `json:"warning,omitempty"`
+		}{Project: p, Warning: "remote was already configured on disk; synced existing URL"}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
 		return
 	}
 
